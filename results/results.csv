@@ -1,0 +1,63 @@
+library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date
+kalman-py,0.1.0,S1,KF per-step,float64,time_per_step,13251.8,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S1,KF per-step,float64,rmse,0.423307,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S1,KF per-step,float64,peak_memory,164260,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S1,KF per-step,float64,time_per_step,10319.8,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S1,KF per-step,float64,rmse,0.423307,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S1,KF per-step,float64,peak_memory,163912,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S1,KF batch,float64,time_per_step,406.8,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S1,KF batch,float64,rmse,0.423307,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S1,KF batch,float64,time_per_step,2606.1,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S1,KF batch,float64,rmse,0.423307,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S1,KF batch,float64,peak_memory,1524384,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S1,KF batch,float64,time_per_step,38046.8,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S1,KF batch,float64,rmse,0.423307,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S1,KF batch,float64,peak_memory,1136154,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S1,KF per-step,float64,max_abs_diff,1.78e-15,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S1,KF batch,float64,max_abs_diff,5.99e-12,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S2,KF per-step,float64,time_per_step,13441.5,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S2,KF per-step,float64,rmse,0.507343,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S2,KF per-step,float64,peak_memory,325324,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S2,KF per-step,float64,time_per_step,10555.9,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S2,KF per-step,float64,rmse,0.507343,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S2,KF per-step,float64,peak_memory,324632,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S2,KF batch,float64,time_per_step,577.5,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S2,KF batch,float64,rmse,0.507343,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S2,KF batch,float64,time_per_step,2786.5,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S2,KF batch,float64,rmse,0.507343,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S2,KF batch,float64,peak_memory,4165368,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S2,KF batch,float64,time_per_step,38977.8,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S2,KF batch,float64,rmse,0.507343,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S2,KF batch,float64,peak_memory,3866229,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S2,KF per-step,float64,max_abs_diff,3.55e-15,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S2,KF batch,float64,max_abs_diff,3.32e-12,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S5,KF per-step,float64,time_per_step,22638.6,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S5,KF per-step,float64,rmse,0.186511,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S5,KF per-step,float64,peak_memory,1222492,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S5,KF per-step,float64,time_per_step,18923.4,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S5,KF per-step,float64,rmse,0.186511,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S5,KF per-step,float64,peak_memory,1220296,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S5,KF batch,float64,time_per_step,5535.4,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S5,KF batch,float64,rmse,0.186511,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S5,KF batch,float64,time_per_step,23729.9,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S5,KF batch,float64,rmse,0.186511,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-numpy,0.1.0,S5,KF batch,float64,peak_memory,42821472,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S5,KF batch,float64,time_per_step,52289.9,ns,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S5,KF batch,float64,rmse,0.186511,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+pykalman,0.11.2,S5,KF batch,float64,peak_memory,45672193,bytes,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S3,EKF,float64,rmse,0.889627,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S3,EKF,float64,nees,4.002,-,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S3,EKF,float64,rmse,0.889627,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S3,EKF,float64,nees,4.002,-,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S3,UKF,float64,rmse,0.889627,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S3,UKF,float64,nees,4.001,-,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S3,UKF,float64,rmse,0.889627,state,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+filterpy,1.4.5,S3,UKF,float64,nees,3.979,-,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S4,KF,float32,steps_to_failure,2753,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py,0.1.0,S4,KF,float32,steps_to_indefinite,2753,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-sqrt,0.1.0,S4,KF,float32,steps_to_failure,1000000,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-sqrt,0.1.0,S4,KF,float32,steps_to_indefinite,1000000,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-jax,0.1.0,S4,KF,float32,steps_to_failure,1000000,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+kalman-py-jax,0.1.0,S4,KF,float32,steps_to_indefinite,1000000,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+naive,textbook,S4,KF,float32,steps_to_failure,67589,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05
+naive,textbook,S4,KF,float32,steps_to_indefinite,1000000,steps,9a2edc7,Apple M3 Pro (arm64),macOS 27.0.1,python-3.12.13,2026-10-05

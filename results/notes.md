@@ -1,0 +1,4 @@
+- KF per-step rows: `kalman-py` is the step-by-step API (NumPy). KF batch rows: `kalman-py` is the JAX backend on CPU and `kalman-py-numpy` the NumPy backend; JAX has no peak_memory because tracemalloc can't see its buffers. max_abs_diff is the largest difference between `kalman-py` and that library's estimates.
+- S3 UKF: kalman-py redraws sigma points from the predicted distribution before each update, while FilterPy reuses the propagated ones, so their estimates differ slightly; the EKFs agree to ~1e-13. A consistent filter has average NEES = 4.
+- S4 (float32): FilterPy is n/a because it converts float32 inputs to float64 internally (its identity matrix is float64), so it can't run S4 as specified.
+- S4: `kalman-py` is the default configuration (NumPy backend, Joseph form); `kalman-py-sqrt` uses `square_root=True`; `kalman-py-jax` is the JAX backend. 1,000,000 means the filter never failed.
