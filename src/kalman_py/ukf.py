@@ -45,6 +45,17 @@ class UnscentedKalmanFilter:
 
     The JAX backend vmaps ``f``, ``h`` and ``residual_z`` over sigma points, so they must be
     ``jax.numpy`` code there; pass module-level functions so compiled code is reused.
+
+    ``vectorized=True`` declares that ``f(X, dt)``, ``h(X)`` and ``residual_z(Z, z)`` accept a
+    stack of points with a leading axis (shape ``(N, n)``) and return one row per point. The
+    NumPy backend then makes one call per step instead of one per sigma point, which is much
+    faster; write the functions with ``[..., i]`` indexing so they also work on single points.
+
+    ``square_root=True`` propagates a Cholesky factor of ``P`` (the square-root UKF of Van der
+    Merwe and Wan), so covariances stay positive-definite by construction. With a negative
+    central weight (small ``alpha``) a factor downdate can fail; that raises
+    ``CovarianceDowndateError`` rather than continuing with an invalid covariance. ``P0`` must be
+    positive-definite in this mode.
     """
 
     def __init__(
@@ -60,6 +71,8 @@ class UnscentedKalmanFilter:
         beta: float = 2.0,
         kappa: float = 0.0,
         residual_z: ResidualFn | None = None,
+        square_root: bool = False,
+        vectorized: bool = False,
     ) -> None:
         self.Q, self.R, self.x0, self.P0 = as_float_arrays(Q, R, x0, P0)
         if self.x0.ndim != 1:
@@ -75,6 +88,11 @@ class UnscentedKalmanFilter:
         self.alpha, self.beta, self.kappa = alpha, beta, kappa
         self._weights = numpy_backend.sigma_weights(n, alpha, beta, kappa, self.P0.dtype)
         self._np_residual: ResidualFn = residual_z if residual_z is not None else np.subtract
+        self.square_root, self.vectorized = square_root, vectorized
+        if square_root:
+            self._L_Q = numpy_backend.psd_factor(self.Q, "Q")
+            self._L_R = numpy_backend.psd_factor(self.R, "R")
+            self._S = numpy_backend.lower_factor(self.P0, "P0")
 
         self.x = self.x0.copy()
         self.P = self.P0.copy()
@@ -89,17 +107,43 @@ class UnscentedKalmanFilter:
 
     def predict(self, dt: float) -> None:
         """Advance the current estimate ``(x, P)`` by ``dt``."""
-        self.x, self.P, _ = numpy_backend.ukf_predict(
-            self.x, self.P, self.Q, dt, self.f, self._weights
-        )
+        if self.square_root:
+            self.x, self._S, _ = numpy_backend.sqrt_ukf_predict(
+                self.x, self._S, self._L_Q, dt, self.f, self._weights, self.vectorized
+            )
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P, _ = numpy_backend.ukf_predict(
+                self.x, self.P, self.Q, dt, self.f, self._weights, self.vectorized
+            )
 
     def update(self, z: ArrayLike) -> None:
         """Condition the current estimate on one measurement."""
         z_arr = np.asarray(z, dtype=self.P.dtype).reshape(-1)
         check_shape("z", z_arr, (self.dim_z,))
-        self.x, self.P, _, _ = numpy_backend.ukf_update(
-            self.x, self.P, z_arr, self.R, self.h, self._np_residual, self._weights
-        )
+        if self.square_root:
+            self.x, self._S, _, _ = numpy_backend.sqrt_ukf_update(
+                self.x,
+                self._S,
+                z_arr,
+                self._L_R,
+                self.h,
+                self._np_residual,
+                self._weights,
+                self.vectorized,
+            )
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P, _, _ = numpy_backend.ukf_update(
+                self.x,
+                self.P,
+                z_arr,
+                self.R,
+                self.h,
+                self._np_residual,
+                self._weights,
+                self.vectorized,
+            )
 
     def _time_steps(self, dt: ArrayLike, T: int) -> Array:
         dts = np.asarray(dt, dtype=self.P0.dtype)
@@ -139,6 +183,8 @@ class UnscentedKalmanFilter:
                 self.h,
                 self._np_residual,
                 self._weights,
+                self.square_root,
+                self.vectorized,
             )
         if backend == "jax":
             jb = jax_backend()
@@ -156,6 +202,8 @@ class UnscentedKalmanFilter:
                 self.alpha,
                 self.beta,
                 self.kappa,
+                self.square_root,
+                self.vectorized,
             )
             return result
         raise ValueError(f"unknown backend {backend!r}; expected 'numpy' or 'jax'")

@@ -4,6 +4,8 @@ Accuracy can't beat a correct UKF by much, so the bar is: match FilterPy's RMSE 
 sigma-point parameters, and be statistically consistent (NEES within chi-squared bounds).
 """
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -21,7 +23,7 @@ from tests.nonlinear_scenarios import (
 )
 
 SEEDS, STEPS, N_STATE = 200, 500, 4
-SIGMA_PARAMS = {"alpha": 0.1, "beta": 2.0, "kappa": -1.0}  # same for both libraries
+SIGMA_PARAMS: dict[str, Any] = {"alpha": 0.1, "beta": 2.0, "kappa": -1.0}  # same for both libraries
 
 
 def _fx(x: np.ndarray, dt: float) -> np.ndarray:

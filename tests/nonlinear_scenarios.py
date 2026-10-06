@@ -59,3 +59,21 @@ def make_range_bearing(seed: int = 0, steps: int = 300, dt: float = 1.0) -> Line
     zs[:, 1] = (zs[:, 1] + np.pi) % (2 * np.pi) - np.pi
     H = np.zeros((2, 4))  # unused: the measurement model is nonlinear
     return LinearScenario(F, H, Q, SENSOR_R, x0, P0, zs, truth)
+
+
+# Vectorized versions: accept a stack of points (leading axis) as well as a single point.
+def cv_f_vectorized(x: ArrayLike, dt: ArrayLike) -> jax.Array:
+    x = jnp.asarray(x)
+    return jnp.stack(
+        [x[..., 0] + dt * x[..., 2], x[..., 1] + dt * x[..., 3], x[..., 2], x[..., 3]], axis=-1
+    )
+
+
+def range_bearing_h_vectorized(x: ArrayLike) -> jax.Array:
+    x = jnp.asarray(x)
+    return jnp.stack([jnp.hypot(x[..., 0], x[..., 1]), jnp.arctan2(x[..., 1], x[..., 0])], axis=-1)
+
+
+def wrap_bearing_residual_vectorized(z: ArrayLike, z_pred: ArrayLike) -> jax.Array:
+    d = jnp.asarray(z) - jnp.asarray(z_pred)
+    return d.at[..., 1].set((d[..., 1] + jnp.pi) % (2 * jnp.pi) - jnp.pi)

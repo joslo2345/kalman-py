@@ -221,20 +221,65 @@ def sigma_weights(
 
 def sigma_points(x: Array, P: Array, gamma: float) -> Array:
     """The ``2n + 1`` sigma points of ``N(x, P)`` as rows: x, x + gamma L_j, x - gamma L_j."""
-    L = gamma * psd_factor(P, "the state covariance")
-    return np.vstack((x, x + L.T, x - L.T))
+    return _sigma_points_from_factor(x, psd_factor(P, "the state covariance"), gamma)
+
+
+def _sigma_points_from_factor(x: Array, L: Array, gamma: float) -> Array:
+    G = gamma * L
+    return np.vstack((x, x + G.T, x - G.T))
+
+
+def _apply(fn: Callable[..., Any], points: Array, vectorized: bool, *args: Any) -> Array:
+    """Evaluate a model function at every row of ``points``: once on the whole stack if it is
+    vectorized, else row by row."""
+    if vectorized:
+        out = np.asarray(fn(points, *args), dtype=points.dtype)
+        if out.ndim != 2 or out.shape[0] != points.shape[0]:
+            raise ValueError(
+                f"a vectorized model function must map ({points.shape[0]}, k) inputs to "
+                f"({points.shape[0]}, j) outputs, got shape {out.shape}"
+            )
+        return out
+    return np.array([np.asarray(fn(p, *args), dtype=points.dtype) for p in points])
+
+
+def _measurement_sigmas(
+    chi: Array, h: MeasurementFn, residual: ResidualFn, w: SigmaWeights, vectorized: bool
+) -> tuple[Array, Array]:
+    """Predicted measurement and the sigma points' deviations from it."""
+    zs = _apply(h, chi, vectorized)
+    # Average residuals relative to the central point instead of the raw values: for plain
+    # subtraction this is the usual weighted mean, and with a wrapping residual it stays correct
+    # for angles near +-pi, where a raw weighted mean of e.g. +3.1 and -3.1 rad would give ~0.
+    if vectorized:
+        d_z = np.asarray(residual(zs, zs[0]), dtype=chi.dtype)
+    else:
+        d_z = np.array([np.asarray(residual(zi, zs[0]), dtype=chi.dtype) for zi in zs])
+    mean_offset = w.mean @ d_z
+    return zs[0] + mean_offset, d_z - mean_offset
+
+
+def _weighted_outer(a: Array, w: Array, b: Array) -> Array:
+    """``sum_i w_i a_i b_i'`` for row-stacked deviations ``a`` and ``b``."""
+    return (a.T * w) @ b
 
 
 def ukf_predict(
-    x: Array, P: Array, Q: Array, dt: float, f: TransitionFn, w: SigmaWeights
+    x: Array,
+    P: Array,
+    Q: Array,
+    dt: float,
+    f: TransitionFn,
+    w: SigmaWeights,
+    vectorized: bool = False,
 ) -> tuple[Array, Array, Array]:
     """Unscented prediction; also returns the cross-covariance ``Cov(x_pred, x)``."""
     chi = sigma_points(x, P, w.gamma)
-    chi_f = np.array([np.asarray(f(c, dt), dtype=P.dtype) for c in chi])
+    chi_f = _apply(f, chi, vectorized, dt)
     x_pred = w.mean @ chi_f
-    d_f, d_x = chi_f - x_pred, chi - x
-    P_pred = _symmetrize((d_f.T * w.cov) @ d_f + Q)
-    return x_pred, P_pred, (d_f.T * w.cov) @ d_x
+    d_f = chi_f - x_pred
+    P_pred = _symmetrize(_weighted_outer(d_f, w.cov, d_f) + Q)
+    return x_pred, P_pred, _weighted_outer(d_f, w.cov, chi - x)
 
 
 def ukf_update(
@@ -245,24 +290,113 @@ def ukf_update(
     h: MeasurementFn,
     residual: ResidualFn,
     w: SigmaWeights,
+    vectorized: bool = False,
 ) -> Correction:
     """Unscented measurement update with sigma points redrawn from ``(x, P)``."""
     chi = sigma_points(x, P, w.gamma)
-    zs = [np.asarray(h(c), dtype=P.dtype) for c in chi]
-    # Average residuals relative to the central point instead of the raw values: for plain
-    # subtraction this is the usual weighted mean, and with a wrapping residual it stays correct
-    # for angles near +-pi, where a raw weighted mean of e.g. +3.1 and -3.1 rad would give ~0.
-    d_z = np.array([np.asarray(residual(zi, zs[0]), dtype=P.dtype) for zi in zs])
-    mean_offset = w.mean @ d_z
-    z_pred = zs[0] + mean_offset
-    d_z = d_z - mean_offset
-    d_x = chi - x
-
-    S = (d_z.T * w.cov) @ d_z + R
-    P_xz = (d_x.T * w.cov) @ d_z
+    z_pred, d_z = _measurement_sigmas(chi, h, residual, w, vectorized)
+    S = _weighted_outer(d_z, w.cov, d_z) + R
+    P_xz = _weighted_outer(chi - x, w.cov, d_z)
     K = np.linalg.solve(S, P_xz.T).T  # P_xz S^-1, with S symmetric
     y = np.asarray(residual(z, z_pred), dtype=P.dtype)
     return Correction(x + K @ y, _symmetrize(P - K @ S @ K.T), y, S)
+
+
+# ---- Square-root unscented Kalman filter (Van der Merwe & Wan, 2001) -----------------------
+
+
+class CovarianceDowndateError(ValueError):
+    """A square-root UKF downdate would make the covariance indefinite."""
+
+
+def lower_factor(M: Array, name: str) -> Array:
+    """Lower-triangular factor with positive diagonal (required by :func:`chol_update`)."""
+    try:
+        return np.linalg.cholesky(M)
+    except np.linalg.LinAlgError:
+        raise ValueError(f"{name} must be positive-definite for the square-root UKF") from None
+
+
+def _triangularize(A: Array) -> Array:
+    """Lower-triangular ``L`` with positive diagonal and ``L L' = A' A``."""
+    L = np.linalg.qr(A, mode="r").T
+    return L * np.where(np.diagonal(L) < 0, -1.0, 1.0).astype(L.dtype)
+
+
+def chol_update(L: Array, v: Array, sign: float) -> Array:
+    """Return the Cholesky factor of ``L L' + sign v v'`` (rank-1 update or downdate)."""
+    L, v = L.copy(), v.copy()
+    n = v.shape[0]
+    for k in range(n):
+        r2 = L[k, k] ** 2 + sign * v[k] ** 2
+        if not r2 > 0:  # also catches NaN
+            raise CovarianceDowndateError(
+                "square-root UKF downdate failed: the covariance would lose "
+                "positive-definiteness (try alpha=1 so all weights are nonnegative, or "
+                "square_root=False)"
+            )
+        r = math.sqrt(r2)
+        c, s = r / L[k, k], v[k] / L[k, k]
+        L[k, k] = r
+        if k + 1 < n:
+            L[k + 1 :, k] = (L[k + 1 :, k] + sign * s * v[k + 1 :]) / c
+            v[k + 1 :] = c * v[k + 1 :] - s * L[k + 1 :, k]
+    return L
+
+
+def _sqrt_weighted_factor(d: Array, w: SigmaWeights, noise_factor: Array) -> Array:
+    """Factor of ``sum_i w.cov_i d_i d_i' + N`` from deviations ``d`` and a factor of ``N``.
+
+    The non-central weights are equal and positive, so they go into one QR; the central weight
+    (negative for small alpha) is applied as a rank-1 update or downdate.
+    """
+    A = np.vstack((math.sqrt(float(w.cov[1])) * d[1:], noise_factor.T))
+    L = _triangularize(A)
+    w0 = float(w.cov[0])
+    return chol_update(L, math.sqrt(abs(w0)) * d[0], 1.0 if w0 >= 0 else -1.0)
+
+
+def sqrt_ukf_predict(
+    x: Array,
+    S: Array,
+    L_Q: Array,
+    dt: float,
+    f: TransitionFn,
+    w: SigmaWeights,
+    vectorized: bool = False,
+) -> tuple[Array, Array, Array]:
+    """Square-root :func:`ukf_predict`: ``S`` and ``L_Q`` are factors of ``P`` and ``Q``."""
+    chi = _sigma_points_from_factor(x, S, w.gamma)
+    chi_f = _apply(f, chi, vectorized, dt)
+    x_pred = w.mean @ chi_f
+    d_f = chi_f - x_pred
+    return x_pred, _sqrt_weighted_factor(d_f, w, L_Q), _weighted_outer(d_f, w.cov, chi - x)
+
+
+def sqrt_ukf_update(
+    x: Array,
+    S: Array,
+    z: Array,
+    L_R: Array,
+    h: MeasurementFn,
+    residual: ResidualFn,
+    w: SigmaWeights,
+    vectorized: bool = False,
+) -> Correction:
+    """Square-root :func:`ukf_update`. The returned ``P`` and ``S`` are factors."""
+    chi = _sigma_points_from_factor(x, S, w.gamma)
+    z_pred, d_z = _measurement_sigmas(chi, h, residual, w, vectorized)
+    S_y = _sqrt_weighted_factor(d_z, w, L_R)
+    P_xz = _weighted_outer(chi - x, w.cov, d_z)
+    # K = P_xz (S_y S_y')^-1 via two triangular solves.
+    K = np.linalg.solve(S_y.T, np.linalg.solve(S_y, P_xz.T)).T
+    y = np.asarray(residual(z, z_pred), dtype=S.dtype)
+    # P_post = P - K S_y S_y' K' = P - U U' with U = K S_y: one downdate per column of U.
+    U = K @ S_y
+    S_post = S
+    for j in range(U.shape[1]):
+        S_post = chol_update(S_post, U[:, j], -1.0)
+    return Correction(x + K @ y, S_post, y, S_y)
 
 
 # ---- Batch filtering -----------------------------------------------------------------------
@@ -440,14 +574,27 @@ def ukf_filter(
     h: MeasurementFn,
     residual: ResidualFn,
     w: SigmaWeights,
+    square_root: bool = False,
+    vectorized: bool = False,
 ) -> UnscentedFilterResult[Array]:
     """Unscented Kalman filter over every row of ``zs``; ``dts[k]`` is the step before ``zs[k]``."""
+    if square_root:
+        L_Q, L_R = psd_factor(Q, "Q"), psd_factor(R, "R")
 
-    def step(k: int, x: Array, P: Array) -> tuple[Array, Array, Correction, Array]:
-        x_pred, P_pred, cross = ukf_predict(x, P, Q, float(dts[k]), f, w)
-        return x_pred, P_pred, ukf_update(x_pred, P_pred, zs[k], R, h, residual, w), cross
+        def sqrt_step(k: int, x: Array, S: Array) -> tuple[Array, Array, Correction, Array]:
+            x_pred, S_pred, cross = sqrt_ukf_predict(x, S, L_Q, float(dts[k]), f, w, vectorized)
+            correction = sqrt_ukf_update(x_pred, S_pred, zs[k], L_R, h, residual, w, vectorized)
+            return x_pred, S_pred, correction, cross
 
-    run = _run_filter(x0, P0, zs, step, False)
+        run = _run_filter(x0, lower_factor(P0, "P0"), zs, sqrt_step, True)
+    else:
+
+        def step(k: int, x: Array, P: Array) -> tuple[Array, Array, Correction, Array]:
+            x_pred, P_pred, cross = ukf_predict(x, P, Q, float(dts[k]), f, w, vectorized)
+            correction = ukf_update(x_pred, P_pred, zs[k], R, h, residual, w, vectorized)
+            return x_pred, P_pred, correction, cross
+
+        run = _run_filter(x0, P0, zs, step, False)
     r = run.result
     return UnscentedFilterResult(
         r.means,

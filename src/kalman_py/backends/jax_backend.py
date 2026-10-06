@@ -28,7 +28,12 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from kalman_py.backends.numpy_backend import psd_factor, sigma_weights
+from kalman_py.backends.numpy_backend import (
+    CovarianceDowndateError,
+    lower_factor,
+    psd_factor,
+    sigma_weights,
+)
 from kalman_py.result import (
     ExtendedFilterResult,
     FilterResult,
@@ -174,11 +179,61 @@ def _cov(C: jax.Array, square_root: bool) -> jax.Array:
     return _mm(C, C.T) if square_root else C
 
 
-def _sigma_points(x: jax.Array, P: jax.Array, gamma: jax.Array) -> jax.Array:
-    # Mirrors numpy_backend.sigma_points (but with Cholesky only: P is positive-definite
-    # whenever the filter is healthy, and this keeps the step fused).
-    L = gamma * _cholesky(P)
-    return jnp.vstack((x[None], x + L.T, x - L.T))
+def _psd_factor(P: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """Factor ``L`` with ``L L' = P`` and a flag that ``P`` is positive semi-definite.
+
+    Mirrors numpy_backend.psd_factor: Cholesky (fused for small ``P``), falling back to an
+    eigendecomposition with clipped eigenvalues when rounding has made ``P`` (barely) singular or
+    indefinite. JAX can't raise inside jit, so a genuinely indefinite ``P`` is reported through
+    the flag and raised by the caller after the run.
+    """
+    L = _cholesky(P)
+
+    def from_eigh(P: jax.Array) -> tuple[jax.Array, jax.Array]:
+        w, V = jnp.linalg.eigh(_symmetrize(P))
+        ok = w.min() >= -100 * float(np.finfo(P.dtype).eps) * jnp.abs(w).max()
+        return V * jnp.sqrt(jnp.clip(w, 0, None)), ok
+
+    return jax.lax.cond(  # type: ignore[no-any-return]
+        jnp.all(jnp.isfinite(L)), lambda P: (L, jnp.array(True)), from_eigh, P
+    )
+
+
+def _sigma_points_from_factor(x: jax.Array, L: jax.Array, gamma: jax.Array) -> jax.Array:
+    G = gamma * L
+    return jnp.vstack((x[None], x + G.T, x - G.T))
+
+
+def _triangularize(A: jax.Array) -> jax.Array:
+    """Lower-triangular ``L`` with positive diagonal and ``L L' = A' A``."""
+    L = jnp.linalg.qr(A, mode="r").T
+    return L * jnp.where(jnp.diagonal(L) < 0, -1.0, 1.0).astype(L.dtype)
+
+
+def _chol_update(L: jax.Array, v: jax.Array, sign: float) -> jax.Array:
+    """Mirrors numpy_backend.chol_update; a failed downdate yields NaN (checked by callers)."""
+    n = v.shape[0]
+    for k in range(n):
+        r = jnp.sqrt(L[k, k] ** 2 + sign * v[k] ** 2)
+        c, s = r / L[k, k], v[k] / L[k, k]
+        L = L.at[k, k].set(r)
+        if k + 1 < n:
+            column = (L[k + 1 :, k] + sign * s * v[k + 1 :]) / c
+            L = L.at[k + 1 :, k].set(column)
+            v = v.at[k + 1 :].set(c * v[k + 1 :] - s * column)
+    return L
+
+
+def _sqrt_weighted_factor(
+    d: jax.Array, w_cov: jax.Array, noise_factor: jax.Array, center_sign: float
+) -> jax.Array:
+    # Mirrors numpy_backend._sqrt_weighted_factor.
+    L = _triangularize(jnp.vstack((jnp.sqrt(w_cov[1]) * d[1:], noise_factor.T)))
+    return _chol_update(L, jnp.sqrt(jnp.abs(w_cov[0])) * d[0], center_sign)
+
+
+def _is_valid_factor(L: jax.Array) -> jax.Array:
+    return jnp.all(jnp.isfinite(L)) & jnp.all(jnp.diagonal(L) > 0)
 
 
 def _weighted_outer(a: jax.Array, w: jax.Array, b: jax.Array) -> jax.Array:
@@ -262,12 +317,15 @@ def _ekf_filter(
     return ExtendedFilterResult(means, covs, pred_means, pred_covs, nis, lls.sum(), jacobians)
 
 
-@partial(jax.jit, static_argnames=("f", "h", "residual"))
+@partial(
+    jax.jit,
+    static_argnames=("f", "h", "residual", "square_root", "vectorized", "center_sign"),
+)
 def _ukf_filter(
-    Q: jax.Array,
-    R: jax.Array,
+    Qc: jax.Array,
+    Rc: jax.Array,
     x0: jax.Array,
-    P0: jax.Array,
+    C0: jax.Array,
     zs: jax.Array,
     dts: jax.Array,
     w_mean: jax.Array,
@@ -277,48 +335,99 @@ def _ukf_filter(
     f: Callable[[jax.Array, jax.Array], jax.Array],
     h: Callable[[jax.Array], jax.Array],
     residual: Callable[[jax.Array, jax.Array], jax.Array] | None,
-) -> UnscentedFilterResult[jax.Array]:
-    # Mirrors numpy_backend.ukf_predict / ukf_update; see the comments there.
+    square_root: bool,
+    vectorized: bool,
+    center_sign: float,
+) -> tuple[UnscentedFilterResult[jax.Array], jax.Array]:
+    """Mirrors numpy_backend.ukf_filter; see the comments there.
+
+    Qc, Rc, C0 are Q, R, P0, or factors of them in square-root form. Also returns a flag that
+    every covariance stayed valid (JAX can't raise inside jit).
+    """
     residual_ = residual or _subtract
-    f_all = jax.vmap(f, in_axes=(0, None))
-    h_all = jax.vmap(h)
-    residual_all = jax.vmap(residual_, in_axes=(0, None))
+    f_all = f if vectorized else jax.vmap(f, in_axes=(0, None))
+    h_all = h if vectorized else jax.vmap(h)
+    residual_all = residual_ if vectorized else jax.vmap(residual_, in_axes=(0, None))
+
+    def sigma_points(x: jax.Array, C: jax.Array) -> tuple[jax.Array, jax.Array]:
+        if square_root:
+            return _sigma_points_from_factor(x, C, gamma), jnp.array(True)
+        L, ok = _psd_factor(C)
+        return _sigma_points_from_factor(x, L, gamma), ok
 
     def step(
-        carry: tuple[jax.Array, jax.Array], inputs: tuple[jax.Array, jax.Array]
-    ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, ...]]:
-        x, P = carry
+        carry: tuple[jax.Array, jax.Array, jax.Array], inputs: tuple[jax.Array, jax.Array]
+    ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], tuple[jax.Array, ...]]:
+        x, C, ok = carry
         z, dt = inputs
-        chi = _sigma_points(x, P, gamma)
-        chi_f = jnp.asarray(f_all(chi, dt), dtype=P.dtype)
+
+        chi, ok_chi = sigma_points(x, C)
+        chi_f = jnp.asarray(f_all(chi, dt), dtype=C.dtype)
         x_pred = _mm(w_mean, chi_f)
         d_f = chi_f - x_pred
-        P_pred = _symmetrize(_weighted_outer(d_f, w_cov, d_f) + Q)
         cross = _weighted_outer(d_f, w_cov, chi - x)
+        if square_root:
+            C_pred = _sqrt_weighted_factor(d_f, w_cov, Qc, center_sign)
+        else:
+            C_pred = _symmetrize(_weighted_outer(d_f, w_cov, d_f) + Qc)
 
-        chi = _sigma_points(x_pred, P_pred, gamma)
-        z_sig = jnp.asarray(h_all(chi), dtype=P.dtype)
-        d_z = jnp.asarray(residual_all(z_sig, z_sig[0]), dtype=P.dtype)
+        chi, ok_chi_pred = sigma_points(x_pred, C_pred)
+        z_sig = jnp.asarray(h_all(chi), dtype=C.dtype)
+        d_z = jnp.asarray(residual_all(z_sig, z_sig[0]), dtype=C.dtype)
         mean_offset = _mm(w_mean, d_z)
         z_pred = z_sig[0] + mean_offset
         d_z = d_z - mean_offset
-        S = _weighted_outer(d_z, w_cov, d_z) + R
         P_xz = _weighted_outer(chi - x_pred, w_cov, d_z)
-        K = _solve_spd(_symmetrize(S), P_xz.T)[0].T
-        y = jnp.asarray(residual_(z, z_pred), dtype=P.dtype)
+        y = jnp.asarray(residual_(z, z_pred), dtype=C.dtype)
+
+        if square_root:
+            S_y = _sqrt_weighted_factor(d_z, w_cov, Rc, center_sign)
+            a = jax.scipy.linalg.solve_triangular(S_y, P_xz.T, lower=True)
+            K = jax.scipy.linalg.solve_triangular(S_y.T, a, lower=False).T
+            C_post = C_pred
+            U = _mm(K, S_y)
+            for j in range(U.shape[1]):
+                C_post = _chol_update(C_post, U[:, j], -1.0)
+            innovation_cov = S_y
+            ok_step = _is_valid_factor(C_pred) & _is_valid_factor(C_post)
+        else:
+            innovation_cov = _weighted_outer(d_z, w_cov, d_z) + Rc
+            K = _solve_spd(_symmetrize(innovation_cov), P_xz.T)[0].T
+            C_post = _symmetrize(C_pred - _mm(_mm(K, innovation_cov), K.T))
+            ok_step = ok_chi & ok_chi_pred
+
         x_post = x_pred + _mm(K, y)
-        P_post = _symmetrize(P_pred - _mm(_mm(K, S), K.T))
-        return (x_post, P_post), (x_post, P_post, x_pred, P_pred, y, S, cross)
+        outputs = (
+            x_post,
+            _cov(C_post, square_root),
+            x_pred,
+            _cov(C_pred, square_root),
+            y,
+            innovation_cov,
+            cross,
+        )
+        return (x_post, C_post, ok & ok_step), outputs
 
-    _, (means, covs, pred_means, pred_covs, ys, Ss, cross) = jax.lax.scan(step, (x0, P0), (zs, dts))
-    nis, log_likelihood = _innovation_stats(ys, Ss)
-    return UnscentedFilterResult(means, covs, pred_means, pred_covs, nis, log_likelihood, cross)
+    (_, _, ok), (means, covs, pred_means, pred_covs, ys, Ss, cross) = jax.lax.scan(
+        step, (x0, C0, jnp.array(True)), (zs, dts)
+    )
+    nis, log_likelihood = _innovation_stats(ys, Ss, square_root)
+    result = UnscentedFilterResult(means, covs, pred_means, pred_covs, nis, log_likelihood, cross)
+    return result, ok
 
 
-def _innovation_stats(ys: jax.Array, Ss: jax.Array) -> tuple[jax.Array, jax.Array]:
-    """Per-step NIS and total log-likelihood from innovations and their covariances."""
-    sol, logdet = jax.vmap(_solve_spd)(Ss, ys)
-    nis = (ys * sol).sum(axis=-1)
+def _innovation_stats(
+    ys: jax.Array, Ss: jax.Array, square_root: bool = False
+) -> tuple[jax.Array, jax.Array]:
+    """Per-step NIS and total log-likelihood from innovations and their covariances, or
+    lower-triangular factors of them in square-root form."""
+    if square_root:
+        w = jax.vmap(partial(jax.scipy.linalg.solve_triangular, lower=True))(Ss, ys)
+        nis = (w * w).sum(axis=-1)
+        logdet = 2 * jnp.log(jnp.abs(jnp.diagonal(Ss, axis1=-2, axis2=-1))).sum(axis=-1)
+    else:
+        sol, logdet = jax.vmap(_solve_spd)(Ss, ys)
+        nis = (ys * sol).sum(axis=-1)
     log_likelihood = -0.5 * (nis + logdet + ys.shape[1] * _LOG_2PI)
     return nis, log_likelihood.sum()
 
@@ -449,14 +558,47 @@ def ukf_filter(
     alpha: float,
     beta: float,
     kappa: float,
+    square_root: bool = False,
+    vectorized: bool = False,
 ) -> UnscentedFilterResult[jax.Array]:
     """Unscented Kalman filter. ``f``, ``h`` and ``residual`` must be ``jax.numpy`` code; they
-    are vmapped over sigma points."""
-    dtype = zs.dtype
-    w = sigma_weights(np.shape(x0)[0], alpha, beta, kappa, np.dtype(dtype))
+    are vmapped over sigma points unless ``vectorized``.
+
+    Raises the same errors as the NumPy backend when a covariance becomes invalid. Checking
+    waits for the computation to finish, so this call is synchronous.
+    """
+    dtype = np.dtype(zs.dtype)
+    w = sigma_weights(np.shape(x0)[0], alpha, beta, kappa, dtype)
+    if square_root:
+        Q = psd_factor(np.asarray(Q, dtype=dtype), "Q")
+        R = psd_factor(np.asarray(R, dtype=dtype), "R")
+        P0 = lower_factor(np.asarray(P0, dtype=dtype), "P0")
     Q_, R_, x0_, P0_, dts_, w_mean, w_cov, gamma = (
         asarray(a, dtype) for a in (Q, R, x0, P0, dts, w.mean, w.cov, w.gamma)
     )
-    return _ukf_filter(  # type: ignore[no-any-return]
-        Q_, R_, x0_, P0_, zs, dts_, w_mean, w_cov, gamma, f=f, h=h, residual=residual
+    result, ok = _ukf_filter(
+        Q_,
+        R_,
+        x0_,
+        P0_,
+        zs,
+        dts_,
+        w_mean,
+        w_cov,
+        gamma,
+        f=f,
+        h=h,
+        residual=residual,
+        square_root=square_root,
+        vectorized=vectorized,
+        center_sign=1.0 if w.cov[0] >= 0 else -1.0,
     )
+    if not bool(ok):
+        if square_root:
+            raise CovarianceDowndateError(
+                "square-root UKF downdate failed: the covariance would lose "
+                "positive-definiteness (try alpha=1 so all weights are nonnegative, or "
+                "square_root=False)"
+            )
+        raise ValueError("the state covariance must be positive semi-definite")
+    return result  # type: ignore[no-any-return]
