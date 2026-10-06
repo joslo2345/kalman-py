@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/typed-mypy_strict-2a78d6" alt="Typed, mypy strict" />
   <img src="https://img.shields.io/badge/lint-ruff-261230" alt="Linted with ruff" />
   <img src="https://img.shields.io/badge/backend-NumPy_%7C_JAX-eb6834" alt="NumPy and JAX backends" />
-  <img src="https://img.shields.io/badge/status-pre--release-lightgrey" alt="Pre-release" />
+  <a href="https://pypi.org/project/kalman-py/"><img src="https://img.shields.io/pypi/v/kalman-py?color=blue" alt="PyPI version" /></a>
 </p>
 
 <p align="center">
@@ -105,13 +105,12 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
   </tr>
   <tr>
     <td align="right" valign="top">
-      <img src="https://img.shields.io/badge/next-PyPI_release-6c757d?style=flat-square" alt="next" />
+      <img src="https://img.shields.io/badge/released-0.1.0-28a745?style=flat-square" alt="released" />
     </td>
     <td valign="top">
-      <strong>Release automation is ready</strong>: a GitHub release builds, checks and tests the
-      package, then publishes it to PyPI with trusted publishing. The first release (0.1.0) is
-      pending the PyPI-side setup. See the
-      <a href="https://github.com/joslo2345/kalman-py/blob/main/CHANGELOG.md">changelog</a>.
+      <strong>First release on <a href="https://pypi.org/project/kalman-py/">PyPI</a></strong>:
+      published by the release workflow with trusted publishing, after the build is checked and
+      tested. See the <a href="https://github.com/joslo2345/kalman-py/blob/main/CHANGELOG.md">changelog</a>.
     </td>
   </tr>
 </table>
@@ -164,10 +163,9 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
 
 ## 🚀 Quick Start
 
-kalman-py isn't on PyPI yet. Install it from a clone, with the optional extras you need:
-
 ```bash
-pip install -e ".[jax,plot]"   # or just -e . for NumPy only
+pip install kalman-py                 # NumPy only
+pip install "kalman-py[jax,plot]"     # with the JAX backend and plotting helpers
 ```
 
 ### Linear filter and smoother
@@ -389,7 +387,7 @@ flowchart LR
 
 | Step | Description |
 |---|---|
-| **First PyPI release** | 0.1.0 through the release workflow (trusted publishing), then a conda-forge recipe once the API is stable |
+| **conda-forge** | A conda-forge recipe once the API is stable |
 | **Missing features** | A control input (`B u`), angle-valued UKF states (`x_mean_fn`/`residual_x`), missing measurements in batch mode |
 | **Published benchmarks** | Numbers from a dedicated, frequency-pinned machine, alongside the C, C++ and Rust implementations |
 
