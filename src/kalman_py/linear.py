@@ -60,6 +60,7 @@ class KalmanFilter:
         check_shape("x0", self.x0, (n,))
         check_shape("P0", self.P0, (n, n))
         self.square_root = square_root
+        self._identity = np.eye(n, dtype=self.P0.dtype)
         if square_root:
             self._L_Q = numpy_backend.psd_factor(self.Q, "Q")
             self._L_R = numpy_backend.psd_factor(self.R, "R")
@@ -93,7 +94,9 @@ class KalmanFilter:
             )
             self.P = self._S @ self._S.T
         else:
-            self.x, self.P, _, _ = numpy_backend.update(self.x, self.P, z_arr, self.H, self.R)
+            self.x, self.P, _, _ = numpy_backend.update(
+                self.x, self.P, z_arr, self.H, self.R, self._identity
+            )
 
     @overload
     def filter(self, zs: ArrayLike, backend: Literal["numpy"] = ...) -> FilterResult[Array]: ...

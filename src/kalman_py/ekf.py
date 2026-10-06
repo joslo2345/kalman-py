@@ -85,6 +85,7 @@ class ExtendedKalmanFilter:
         self._np_residual: ResidualFn = residual_z if residual_z is not None else np.subtract
 
         self.square_root = square_root
+        self._identity = np.eye(n, dtype=self.P0.dtype)
         if square_root:
             self._L_Q = numpy_backend.psd_factor(self.Q, "Q")
             self._L_R = numpy_backend.psd_factor(self.R, "R")
@@ -131,7 +132,14 @@ class ExtendedKalmanFilter:
             self.P = self._S @ self._S.T
         else:
             self.x, self.P, _, _ = numpy_backend.ekf_update(
-                self.x, self.P, z_arr, self.R, self.h, self._np_jac_h, self._np_residual
+                self.x,
+                self.P,
+                z_arr,
+                self.R,
+                self.h,
+                self._np_jac_h,
+                self._np_residual,
+                identity=self._identity,
             )
 
     def _time_steps(self, dt: ArrayLike, T: int) -> Array:

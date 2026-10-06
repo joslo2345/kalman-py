@@ -28,11 +28,13 @@ ResidualFn = Callable[[Array, Array], Array]  # residual(z, z_pred) -> innovatio
 _LOG_2PI = math.log(2 * math.pi)
 
 
-class UpdateResult(NamedTuple):
+class Correction(NamedTuple):
+    """Result of a measurement update. In square-root form ``P`` and ``S`` are factors."""
+
     x: Array
-    P: Array  # the covariance, or its factor in square-root form
-    nis: float
-    log_likelihood: float
+    P: Array  # posterior covariance
+    y: Array  # innovation
+    S: Array  # innovation covariance
 
 
 def _symmetrize(P: Array) -> Array:
@@ -62,29 +64,59 @@ def predict(x: Array, P: Array, F: Array, Q: Array) -> tuple[Array, Array]:
     return F @ x, _symmetrize(F @ P @ F.T + Q)
 
 
-def update(x: Array, P: Array, z: Array, H: Array, R: Array) -> UpdateResult:
-    """Condition the state on measurement ``z`` using the Joseph-form covariance update."""
-    return _correct(x, P, z - H @ x, H, R)
+def update(
+    x: Array, P: Array, z: Array, H: Array, R: Array, identity: Array | None = None
+) -> Correction:
+    """Condition the state on measurement ``z`` using the Joseph-form covariance update.
+
+    Pass ``identity`` (``np.eye(n)`` in P's dtype) when calling in a loop, to skip rebuilding it.
+    """
+    return _correct(x, P, z - H @ x, H, R, identity)
 
 
-def _correct(x: Array, P: Array, y: Array, H: Array, R: Array) -> UpdateResult:
-    """Measurement update given the innovation ``y`` and (linearized) measurement matrix ``H``."""
+def _correct(
+    x: Array, P: Array, y: Array, H: Array, R: Array, identity: Array | None = None
+) -> Correction:
+    """Measurement update given the innovation ``y`` and (linearized) measurement matrix ``H``.
+
+    Per-step cost is dominated by fixed call overhead on small matrices, so this does the
+    minimum: NIS and likelihood are left to :func:`_innovation_stats`, which batches them.
+    """
+    if identity is None:
+        identity = np.eye(x.shape[0], dtype=P.dtype)
+    K, S = _joseph_gain(P, H, R)
+    return Correction(x + K @ y, _joseph_covariance(P, K, H, R, identity), y, S)
+
+
+def _joseph_gain(P: Array, H: Array, R: Array) -> tuple[Array, Array]:
+    """Kalman gain and innovation covariance."""
     HP = H @ P
-    S = _symmetrize(HP @ H.T + R)
-    # P and S are symmetric, so K = P H' S^-1 = (S^-1 H P)'. One solve yields K' and S^-1 y,
-    # avoiding an explicit inverse of S.
-    sol = np.linalg.solve(S, np.column_stack((HP, y)))
-    K = sol[:, :-1].T
-    nis = float(y @ sol[:, -1])
+    # Not symmetrized: S only feeds the gain, and the Joseph form is valid for any gain.
+    S = HP @ H.T + R
+    # P and S are symmetric, so K = P H' S^-1 = (S^-1 H P)', without an explicit inverse.
+    return np.linalg.solve(S, HP).T, S
 
+
+def _joseph_covariance(P: Array, K: Array, H: Array, R: Array, identity: Array) -> Array:
     # Joseph form is far more robust than P = (I - KH) P, but can still turn indefinite under
     # rounding when cond(P) is extreme; the square-root form below cannot.
-    I_KH = np.eye(x.shape[0], dtype=P.dtype) - K @ H
-    P_post = _symmetrize(I_KH @ P @ I_KH.T + K @ R @ K.T)
+    I_KH = identity - K @ H
+    return _symmetrize(I_KH @ P @ I_KH.T + K @ R @ K.T)
 
-    _, logdet = np.linalg.slogdet(S)
-    log_likelihood = -0.5 * (nis + float(logdet) + y.shape[0] * _LOG_2PI)
-    return UpdateResult(x + K @ y, P_post, nis, log_likelihood)
+
+def _innovation_stats(ys: Array, Ss: Array, square_root: bool) -> tuple[Array, Array]:
+    """Per-step NIS and total log-likelihood from innovations ``ys`` (T, m) and their
+    covariances ``Ss`` (T, m, m), or lower-triangular factors of them in square-root form."""
+    m = ys.shape[1]
+    w = np.linalg.solve(Ss, ys[..., None])[..., 0]
+    if square_root:
+        nis = (w * w).sum(axis=-1)  # w = L^-1 y is the whitened innovation
+        logdet = 2 * np.log(np.abs(np.diagonal(Ss, axis1=-2, axis2=-1))).sum(axis=-1)
+    else:
+        nis = (ys * w).sum(axis=-1)
+        logdet = np.linalg.slogdet(Ss)[1]
+    log_likelihood = -0.5 * (nis + logdet + m * _LOG_2PI)
+    return nis, np.asarray(log_likelihood.sum(dtype=np.float64), dtype=ys.dtype)
 
 
 # ---- Square-root form ----------------------------------------------------------------------
@@ -97,12 +129,12 @@ def sqrt_predict(x: Array, S: Array, F: Array, L_Q: Array) -> tuple[Array, Array
     return F @ x, r.T
 
 
-def sqrt_update(x: Array, S: Array, z: Array, H: Array, L_R: Array) -> UpdateResult:
+def sqrt_update(x: Array, S: Array, z: Array, H: Array, L_R: Array) -> Correction:
     """Square-root counterpart of :func:`update`; ``S`` and ``L_R`` factor ``P`` and ``R``."""
     return _sqrt_correct(x, S, z - H @ x, H, L_R)
 
 
-def _sqrt_correct(x: Array, S: Array, y: Array, H: Array, L_R: Array) -> UpdateResult:
+def _sqrt_correct(x: Array, S: Array, y: Array, H: Array, L_R: Array) -> Correction:
     m, n = L_R.shape[0], S.shape[0]
     # Triangularizing the pre-array  [L_R  H S]   gives   [L_y  0     ]
     #                                [0    S  ]           [Kb   S_post]
@@ -112,10 +144,7 @@ def _sqrt_correct(x: Array, S: Array, y: Array, H: Array, L_R: Array) -> UpdateR
     L_y, Kb, S_post = post[:m, :m], post[m:, :m], post[m:, m:]
 
     w = np.linalg.solve(L_y, y)  # whitened innovation: L_y^-1 y
-    nis = float(w @ w)
-    logdet = 2 * float(np.log(np.abs(np.diagonal(L_y))).sum())
-    log_likelihood = -0.5 * (nis + logdet + m * _LOG_2PI)
-    return UpdateResult(x + Kb @ w, S_post, nis, log_likelihood)
+    return Correction(x + Kb @ w, S_post, y, L_y)
 
 
 # ---- Extended Kalman filter steps ----------------------------------------------------------
@@ -150,18 +179,21 @@ def ekf_update(
     jac_h: MeasurementFn,
     residual: ResidualFn,
     square_root: bool = False,
-) -> UpdateResult:
+    identity: Array | None = None,
+) -> Correction:
     """Condition on ``z`` with ``h`` linearized at ``x`` (``P``, ``R`` factors if square-root)."""
     H = np.asarray(jac_h(x), dtype=P.dtype)
     y = np.asarray(residual(z, np.asarray(h(x), dtype=P.dtype)), dtype=P.dtype)
-    return (_sqrt_correct if square_root else _correct)(x, P, y, H, R)
+    if square_root:
+        return _sqrt_correct(x, P, y, H, R)
+    return _correct(x, P, y, H, R, identity)
 
 
 # ---- Batch filtering -----------------------------------------------------------------------
 
-# One filter step from (x, C) with C the covariance or its factor:
-# returns (x_pred, C_pred, x_post, C_post, nis, log_likelihood, transition_matrix).
-_Step = Callable[[int, Array, Array], tuple[Array, Array, Array, Array, float, float, Array]]
+# One filter step from (x, C), with C the covariance or its factor:
+# returns (x_pred, C_pred, correction, transition_matrix).
+_Step = Callable[[int, Array, Array], tuple[Array, Array, Correction, Array]]
 
 
 class _Run(NamedTuple):
@@ -169,29 +201,30 @@ class _Run(NamedTuple):
     jacobians: Array
 
 
-def _run_filter(x0: Array, C0: Array, T: int, step: _Step, square_root: bool) -> _Run:
+def _run_filter(x0: Array, C0: Array, zs: Array, step: _Step, square_root: bool) -> _Run:
+    T, m = zs.shape
     n, dtype = x0.shape[0], C0.dtype
     means = np.empty((T, n), dtype=dtype)
     covs = np.empty((T, n, n), dtype=dtype)
     predicted_means = np.empty((T, n), dtype=dtype)
     predicted_covs = np.empty((T, n, n), dtype=dtype)
     jacobians = np.empty((T, n, n), dtype=dtype)
-    nis = np.empty(T, dtype=dtype)
-    log_likelihood = 0.0
-
-    def cov(C: Array) -> Array:
-        return C @ C.T if square_root else C
+    innovations = np.empty((T, m), dtype=dtype)
+    innovation_covs = np.empty((T, m, m), dtype=dtype)
 
     x, C = x0, C0
     for k in range(T):
-        x_pred, C_pred, x, C, nis[k], ll, jacobians[k] = step(k, x, C)
-        predicted_means[k], predicted_covs[k] = x_pred, cov(C_pred)
-        means[k], covs[k] = x, cov(C)
-        log_likelihood += ll
+        predicted_means[k], C_pred, (x, C, innovations[k], innovation_covs[k]), jacobians[k] = step(
+            k, x, C
+        )
+        if square_root:
+            predicted_covs[k], covs[k] = C_pred @ C_pred.T, C @ C.T
+        else:
+            predicted_covs[k], covs[k] = C_pred, C
+        means[k] = x
 
-    result = FilterResult(
-        means, covs, predicted_means, predicted_covs, nis, np.asarray(log_likelihood, dtype=dtype)
-    )
+    nis, log_likelihood = _innovation_stats(innovations, innovation_covs, square_root)
+    result = FilterResult(means, covs, predicted_means, predicted_covs, nis, log_likelihood)
     return _Run(result, jacobians)
 
 
@@ -209,21 +242,74 @@ def kalman_filter(
     if square_root:
         L_Q, L_R = psd_factor(Q, "Q"), psd_factor(R, "R")
 
-        def step(
-            k: int, x: Array, S: Array
-        ) -> tuple[Array, Array, Array, Array, float, float, Array]:
+        def sqrt_step(k: int, x: Array, S: Array) -> tuple[Array, Array, Correction, Array]:
             x_pred, S_pred = sqrt_predict(x, S, F, L_Q)
-            return (x_pred, S_pred, *sqrt_update(x_pred, S_pred, zs[k], H, L_R), F)
+            return x_pred, S_pred, sqrt_update(x_pred, S_pred, zs[k], H, L_R), F
 
-        return _run_filter(x0, psd_factor(P0, "P0"), zs.shape[0], step, True).result
+        return _run_filter(x0, psd_factor(P0, "P0"), zs, sqrt_step, True).result
 
-    def joseph_step(
-        k: int, x: Array, P: Array
-    ) -> tuple[Array, Array, Array, Array, float, float, Array]:
+    return _joseph_kalman_filter(F, H, Q, R, x0, P0, zs)
+
+
+_STEADY_STATE_CHECK_EVERY = 16
+
+
+def _joseph_kalman_filter(
+    F: Array,
+    H: Array,
+    Q: Array,
+    R: Array,
+    x0: Array,
+    P0: Array,
+    zs: Array,
+    detect_steady_state: bool = True,
+) -> FilterResult[Array]:
+    """Joseph-form batch filter with an exact steady-state shortcut.
+
+    For a time-invariant model the covariance recursion ignores the measurements. Once the
+    predicted covariance repeats bit for bit, every later covariance and gain would be the same
+    bits again, so they are reused and each remaining step only updates the mean, with the same
+    operations as the full step. The result is bitwise identical to the full computation.
+    """
+    T, m = zs.shape
+    n, dtype = x0.shape[0], P0.dtype
+    identity = np.eye(n, dtype=dtype)
+    means = np.empty((T, n), dtype=dtype)
+    covs = np.empty((T, n, n), dtype=dtype)
+    predicted_means = np.empty((T, n), dtype=dtype)
+    predicted_covs = np.empty((T, n, n), dtype=dtype)
+    innovations = np.empty((T, m), dtype=dtype)
+    innovation_covs = np.empty((T, m, m), dtype=dtype)
+
+    x, P = x0, P0
+    k = 0
+    while k < T:
         x_pred, P_pred = predict(x, P, F, Q)
-        return (x_pred, P_pred, *update(x_pred, P_pred, zs[k], H, R), F)
+        K, S = _joseph_gain(P_pred, H, R)
+        y = zs[k] - H @ x_pred
+        x, P = x_pred + K @ y, _joseph_covariance(P_pred, K, H, R, identity)
+        predicted_means[k], predicted_covs[k], means[k], covs[k] = x_pred, P_pred, x, P
+        innovations[k], innovation_covs[k] = y, S
+        k += 1
+        # A repeat at step k persists at every later step, so checking only every
+        # _STEADY_STATE_CHECK_EVERY steps is just as exact and keeps the check's cost negligible.
+        if (
+            detect_steady_state
+            and k % _STEADY_STATE_CHECK_EVERY == 0
+            and np.array_equal(P_pred, predicted_covs[k - 2])
+        ):
+            break
 
-    return _run_filter(x0, P0, zs.shape[0], joseph_step, False).result
+    # Steady state (if reached): same mean arithmetic as above, covariances repeat.
+    predicted_covs[k:], covs[k:], innovation_covs[k:] = P_pred, P, S
+    for j in range(k, T):
+        x_pred = F @ x
+        y = zs[j] - H @ x_pred
+        x = x_pred + K @ y
+        predicted_means[j], means[j], innovations[j] = x_pred, x, y
+
+    nis, log_likelihood = _innovation_stats(innovations, innovation_covs, False)
+    return FilterResult(means, covs, predicted_means, predicted_covs, nis, log_likelihood)
 
 
 def ekf_filter(
@@ -246,13 +332,14 @@ def ekf_filter(
         if square_root
         else (Q, R, P0)
     )
+    identity = np.eye(x0.shape[0], dtype=P0.dtype)
 
-    def step(k: int, x: Array, C: Array) -> tuple[Array, Array, Array, Array, float, float, Array]:
+    def step(k: int, x: Array, C: Array) -> tuple[Array, Array, Correction, Array]:
         x_pred, C_pred, F = ekf_predict(x, C, Q_, float(dts[k]), f, jac_f, square_root)
-        updated = ekf_update(x_pred, C_pred, zs[k], R_, h, jac_h, residual, square_root)
-        return (x_pred, C_pred, *updated, F)
+        updated = ekf_update(x_pred, C_pred, zs[k], R_, h, jac_h, residual, square_root, identity)
+        return x_pred, C_pred, updated, F
 
-    run = _run_filter(x0, C0, zs.shape[0], step, square_root)
+    run = _run_filter(x0, C0, zs, step, square_root)
     r = run.result
     return ExtendedFilterResult(
         r.means, r.covs, r.predicted_means, r.predicted_covs, r.nis, r.log_likelihood, run.jacobians

@@ -1,10 +1,12 @@
+from dataclasses import fields
+
 import numpy as np
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from kalman_py import KalmanFilter
-from tests.scenarios import LinearScenario
+from kalman_py import FilterResult, KalmanFilter
+from tests.scenarios import LinearScenario, make_cv_2d
 
 stats = pytest.importorskip("scipy.stats")
 
@@ -104,3 +106,33 @@ def test_rejects_wrong_measurement_shape(cv_scenario: LinearScenario) -> None:
 def test_unknown_backend_raises(cv_scenario: LinearScenario) -> None:
     with pytest.raises(ValueError, match="unknown backend"):
         KalmanFilter(**cv_scenario.params).filter(cv_scenario.zs, backend="torch")  # type: ignore[call-overload]
+
+
+def test_steady_state_shortcut_is_bitwise_exact() -> None:
+    from kalman_py.backends.numpy_backend import _joseph_kalman_filter
+
+    sc = make_cv_2d(seed=4, steps=2000)
+    args = (sc.F, sc.H, sc.Q, sc.R, sc.x0, sc.P0, sc.zs)
+    fast = _joseph_kalman_filter(*args)
+    full = _joseph_kalman_filter(*args, detect_steady_state=False)
+
+    repeats = [
+        np.array_equal(full.predicted_covs[k], full.predicted_covs[k - 1]) for k in range(1, 2000)
+    ]
+    assert any(repeats), "scenario must reach a floating-point fixed point to exercise the shortcut"
+    for field in fields(FilterResult):
+        np.testing.assert_array_equal(getattr(fast, field.name), getattr(full, field.name))
+
+
+def test_steady_state_shortcut_not_taken_without_exact_repeat() -> None:
+    from kalman_py.backends.numpy_backend import _joseph_kalman_filter
+
+    # Process noise keeps P growing in the unobserved velocity, so it never repeats.
+    F = np.array([[1.0, 1.0], [0.0, 1.0]])
+    H = np.array([[0.0, 1.0]])
+    zs = np.random.default_rng(0).normal(size=(300, 1))
+    args = (F, H, np.eye(2), np.eye(1), np.zeros(2), np.eye(2), zs)
+    fast = _joseph_kalman_filter(*args)
+    full = _joseph_kalman_filter(*args, detect_steady_state=False)
+    np.testing.assert_array_equal(fast.covs, full.covs)
+    assert fast.covs[-1, 0, 0] > fast.covs[-2, 0, 0]
