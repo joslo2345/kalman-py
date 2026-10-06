@@ -1,1 +1,0 @@
-"""Rauch-Tung-Striebel smoother."""

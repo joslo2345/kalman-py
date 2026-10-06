@@ -52,3 +52,13 @@ def test_log_likelihood_matches_pykalman(cv_scenario: LinearScenario) -> None:
     ours = KalmanFilter(**sc.params).filter(sc.zs)
     theirs = _pykalman_with_aligned_prior(sc).loglikelihood(sc.zs)  # type: ignore[attr-defined]
     np.testing.assert_allclose(ours.log_likelihood, theirs, rtol=1e-9)
+
+
+def test_smoother_matches_pykalman(cv_scenario: LinearScenario) -> None:
+    sc = cv_scenario
+    kf = KalmanFilter(**sc.params)
+    ours = kf.smooth(kf.filter(sc.zs))
+    means, covs = _pykalman_with_aligned_prior(sc).smooth(sc.zs)  # type: ignore[attr-defined]
+
+    np.testing.assert_allclose(ours.means, means, rtol=1e-9, atol=1e-12)
+    np.testing.assert_allclose(ours.covs, covs, rtol=1e-9, atol=1e-12)

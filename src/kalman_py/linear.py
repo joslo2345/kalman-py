@@ -9,7 +9,7 @@ from numpy.typing import ArrayLike
 
 from kalman_py._typing import Array
 from kalman_py.backends import numpy_backend
-from kalman_py.result import FilterResult
+from kalman_py.result import FilterResult, SmootherResult
 
 Backend = Literal["numpy", "jax"]
 
@@ -36,7 +36,7 @@ class KalmanFilter:
     convention).
 
     Use :meth:`predict` and :meth:`update` in real-time loops, or :meth:`filter` to process a
-    whole measurement sequence at once.
+    whole measurement sequence at once, then :meth:`smooth` to refine it with future data.
     """
 
     def __init__(
@@ -97,3 +97,12 @@ class KalmanFilter:
         if backend == "jax":
             raise NotImplementedError("the JAX backend is not implemented yet")
         raise ValueError(f"unknown backend {backend!r}; expected 'numpy' or 'jax'")
+
+    def smooth(self, result: FilterResult) -> SmootherResult:
+        """Run the RTS smoother over the output of :meth:`filter`."""
+        if result.means.ndim != 2 or result.means.shape[1] != self.dim_x:
+            raise ValueError(
+                f"result does not match this filter: expected means of shape (T, {self.dim_x}), "
+                f"got {result.means.shape}"
+            )
+        return numpy_backend.rts_smoother(self.F, result)

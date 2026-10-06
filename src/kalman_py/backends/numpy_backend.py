@@ -11,7 +11,7 @@ from typing import NamedTuple
 import numpy as np
 
 from kalman_py._typing import Array
-from kalman_py.result import FilterResult
+from kalman_py.result import FilterResult, SmootherResult
 
 _LOG_2PI = math.log(2 * math.pi)
 
@@ -74,3 +74,17 @@ def kalman_filter(
         log_likelihood += ll
 
     return FilterResult(means, covs, predicted_means, predicted_covs, nis, log_likelihood)
+
+
+def rts_smoother(F: Array, result: FilterResult) -> SmootherResult:
+    """Rauch-Tung-Striebel backward pass over the output of :func:`kalman_filter`."""
+    means = result.means.copy()
+    covs = result.covs.copy()
+    for k in range(means.shape[0] - 2, -1, -1):
+        P = result.covs[k]
+        P_pred = result.predicted_covs[k + 1]
+        # G = P F' P_pred^-1 = (P_pred^-1 F P)' since P and P_pred are symmetric.
+        G = np.linalg.solve(P_pred, F @ P).T
+        means[k] = result.means[k] + G @ (means[k + 1] - result.predicted_means[k + 1])
+        covs[k] = _symmetrize(P + G @ (covs[k + 1] - P_pred) @ G.T)
+    return SmootherResult(means, covs)

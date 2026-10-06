@@ -21,3 +21,11 @@ class FilterResult:
     predicted_covs: Array  # (T, n, n)
     nis: Array  # (T,) normalized innovation squared
     log_likelihood: float  # log p(z_1, ..., z_T)
+
+
+@dataclass(frozen=True)
+class SmootherResult:
+    """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``."""
+
+    means: Array  # (T, n)
+    covs: Array  # (T, n, n)

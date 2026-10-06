@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-The project is scaffolded directly in this directory. Step 5.1 (the linear KF on the NumPy backend) is done. The other modules under `src/kalman_py/` are still empty stubs. `kalman-python-repo-guide.md` is the build plan for `kalman-py`: a fast, typed Python Kalman filter library meant to fill gaps left by FilterPy and pykalman (JAX backend, automatic EKF Jacobians, Q/R learning, NIS/NEES diagnostics). Treat that guide as the spec and read the relevant section before implementing anything. Ruff excludes the guide because newer ruff formats code blocks inside Markdown.
+The project is scaffolded directly in this directory. Steps 5.1–5.2 (the linear KF and RTS smoother on the NumPy backend) are done. The other modules under `src/kalman_py/` are still empty stubs. `kalman-python-repo-guide.md` is the build plan for `kalman-py`: a fast, typed Python Kalman filter library meant to fill gaps left by FilterPy and pykalman (JAX backend, automatic EKF Jacobians, Q/R learning, NIS/NEES diagnostics). Treat that guide as the spec and read the relevant section before implementing anything. Ruff excludes the guide because newer ruff formats code blocks inside Markdown.
 
 ## Tooling
 
@@ -18,10 +18,11 @@ Set up the environment with `uv sync --all-extras`.
 
 ## Architecture
 
-- `backends/numpy_backend.py` holds pure functions (`predict`, `update`, `kalman_filter`). The classes (`linear.KalmanFilter`) validate inputs, keep the step-by-step state `(x, P)` and dispatch `filter(zs, backend=...)` to a backend. `filter()` always starts from `(x0, P0)` and leaves `(x, P)` untouched.
+- `backends/numpy_backend.py` holds pure functions (`predict`, `update`, `kalman_filter`, `rts_smoother`). Each backend implements its own algorithms, so there's no separate `smoother.py` module, unlike the guide's layout. The classes (`linear.KalmanFilter`) validate inputs, keep the step-by-step state `(x, P)` and dispatch `filter(zs, backend=...)` to a backend. `filter()` always starts from `(x0, P0)` and leaves `(x, P)` untouched.
 - `FilterResult` (`result.py`) stores posteriors plus the one-step-ahead priors (`predicted_means`, `predicted_covs`) that the RTS smoother needs, along with per-step NIS and the total log-likelihood.
 - Dtype is preserved end to end, so float32 inputs stay float32 (scenario S4 depends on this). Any constant created inside the backends, such as an identity matrix, must use the input dtype.
 - Covariances are symmetrized after every predict and update, and gains come from `np.linalg.solve` rather than an explicit inverse.
+- `tests/unit/test_smoother.py` checks the smoother against the exact posterior from conditioning the joint Gaussian of all states and measurements. This is an independent reference that doesn't share any of the recursion's code.
 - `tests/scenarios.py` holds the shared synthetic problems, and `tests/conftest.py` exposes them as fixtures.
 
 ## Plan for the rest
