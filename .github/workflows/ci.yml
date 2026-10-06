@@ -73,6 +73,22 @@ jobs:
           name: coverage
           path: coverage.xml
 
+  minimum-versions:
+    # The oldest dependency versions pyproject.toml allows, on the oldest Python.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - name: Install the declared minimum versions
+        run: |
+          uv venv
+          uv pip install -e . "numpy==1.24.*" "jax==0.4.30" "jaxlib==0.4.30" "matplotlib==3.7.*" \
+            pytest hypothesis scipy filterpy pykalman
+          uv pip list | grep -E "^(numpy|jax|jaxlib|matplotlib|scipy) "
+      - run: .venv/bin/python -m pytest -q
+
   docs:
     # Re-executes the tutorial notebooks (they're stored with outputs, so they must still run)
     # and builds the site in strict mode: broken links or API cross-references fail the build.

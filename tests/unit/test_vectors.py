@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from benchmarks.scenarios import VECTORS, load
+# Benchmark tooling and scenario data live in the repository, not in the sdist.
+scenarios = pytest.importorskip("benchmarks.scenarios")
+VECTORS, load = scenarios.VECTORS, scenarios.load
+if not (VECTORS / "S1" / "meta.json").exists():
+    pytest.skip("benchmark scenarios are not available", allow_module_level=True)
 
 ALL = ["S1", "S2", "S3", "S4", "S5"]
 LINEAR_WITH_TRUTH = ["S1", "S2", "S5"]

@@ -1673,7 +1673,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jax", marker = "extra == 'jax'", specifier = ">=0.4" },
+    { name = "jax", marker = "extra == 'jax'", specifier = ">=0.4.30" },
     { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.7" },
     { name = "numpy", specifier = ">=1.24" },
 ]

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="kalman-py logo" width="140" />
+  <img src="https://raw.githubusercontent.com/joslo2345/kalman-py/main/docs/assets/logo.svg" alt="kalman-py logo" width="140" />
 </p>
 
 <h1 align="center">kalman-py</h1>
@@ -9,8 +9,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/joslo2345/kalman-py/actions/workflows/ci.yml"><img src="https://github.com/joslo2345/kalman-py/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://joslo2345.github.io/kalman-py/"><img src="https://img.shields.io/badge/docs-online-2a78d6" alt="Documentation" /></a>
   <img src="https://img.shields.io/badge/python-%E2%89%A53.10-3776ab" alt="Python 3.10+" />
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" /></a>
+  <a href="https://github.com/joslo2345/kalman-py/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/typed-mypy_strict-2a78d6" alt="Typed, mypy strict" />
   <img src="https://img.shields.io/badge/lint-ruff-261230" alt="Linted with ruff" />
   <img src="https://img.shields.io/badge/backend-NumPy_%7C_JAX-eb6834" alt="NumPy and JAX backends" />
@@ -30,7 +32,8 @@
   <a href="#-benchmarks"><strong>Benchmarks</strong></a> ·
   <a href="#-architecture"><strong>Architecture</strong></a> ·
   <a href="#-roadmap"><strong>Roadmap</strong></a> ·
-  <a href="#-development"><strong>Development</strong></a>
+  <a href="#-development"><strong>Development</strong></a> ·
+  <a href="https://joslo2345.github.io/kalman-py/"><strong>Documentation</strong></a>
 </p>
 
 ---
@@ -44,8 +47,8 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-speed-dark.svg" />
-    <img src="docs/assets/benchmark-speed-light.svg" alt="Time per filter step: kalman-py's JAX backend takes 0.41, 0.58 and 5.5 microseconds on scenarios S1, S2 and S5, against 38, 39 and 52 for pykalman; in per-step mode kalman-py takes 13.3, 13.4 and 22.6 microseconds against FilterPy's 10.3, 10.6 and 18.9." width="860" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/joslo2345/kalman-py/main/docs/assets/benchmark-speed-dark.svg" />
+    <img src="https://raw.githubusercontent.com/joslo2345/kalman-py/main/docs/assets/benchmark-speed-light.svg" alt="Time per filter step: kalman-py's JAX backend takes 0.41, 0.58 and 5.5 microseconds on scenarios S1, S2 and S5, against 38, 39 and 52 for pykalman; in per-step mode kalman-py takes 13.3, 13.4 and 22.6 microseconds against FilterPy's 10.3, 10.6 and 18.9." width="860" />
   </picture>
 </p>
 
@@ -76,17 +79,17 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
     </td>
     <td valign="top">
       <strong>Reproducible comparison</strong> with FilterPy and pykalman on five frozen scenarios
-      (<a href="./tests/vectors/README.md">S1–S5</a>), shared with the C, C++ and Rust implementations.
+      (<a href="https://github.com/joslo2345/kalman-py/blob/main/tests/vectors/README.md">S1–S5</a>), shared with the C, C++ and Rust implementations.
     </td>
   </tr>
   <tr>
     <td align="right" valign="top">
-      <img src="https://img.shields.io/badge/ready-CI-17a2b8?style=flat-square" alt="ready" />
+      <img src="https://img.shields.io/badge/done-CI-28a745?style=flat-square" alt="done" />
     </td>
     <td valign="top">
-      <strong>GitHub Actions workflow</strong> for Python 3.10–3.14 on Linux, macOS and Windows,
-      with and without JAX, plus a comparison report. Not run on GitHub yet: the repository has
-      no remote so far.
+      <strong>GitHub Actions</strong> on every push and pull request: Python 3.10–3.14 on Linux,
+      macOS and Windows, with and without JAX, the minimum supported dependency versions, the
+      docs, and a comparison report against FilterPy and pykalman.
     </td>
   </tr>
   <tr>
@@ -95,9 +98,9 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
     </td>
     <td valign="top">
       <strong>Documentation site</strong> (MkDocs Material) with guides, an API reference and a
-      <a href="./docs/migration.md">migration guide from FilterPy</a>, plus three
-      <a href="./examples">tutorial notebooks</a>: target tracking, multi-rate sensor fusion and
-      learning the noise. Not hosted yet; build it locally (see <a href="#-development">Development</a>).
+      <a href="https://joslo2345.github.io/kalman-py/migration/">migration guide from FilterPy</a>, plus three
+      <a href="https://github.com/joslo2345/kalman-py/tree/main/examples">tutorial notebooks</a>: target tracking, multi-rate sensor fusion and
+      learning the noise, published at <a href="https://joslo2345.github.io/kalman-py/">joslo2345.github.io/kalman-py</a>.
     </td>
   </tr>
   <tr>
@@ -105,7 +108,10 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
       <img src="https://img.shields.io/badge/next-PyPI_release-6c757d?style=flat-square" alt="next" />
     </td>
     <td valign="top">
-      A first PyPI release. See the <a href="#-roadmap">roadmap</a>.
+      <strong>Release automation is ready</strong>: a GitHub release builds, checks and tests the
+      package, then publishes it to PyPI with trusted publishing. The first release (0.1.0) is
+      pending the PyPI-side setup. See the
+      <a href="https://github.com/joslo2345/kalman-py/blob/main/CHANGELOG.md">changelog</a>.
     </td>
   </tr>
 </table>
@@ -125,7 +131,7 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
       <strong>🎯 Exact by construction</strong><br/><br/>
       Same estimates as FilterPy (within 1e-14) and pykalman (within 1e-11) on linear problems; the batch
       steady-state shortcut is bitwise identical to the full computation.<br/><br/>
-      <a href="./tests/comparison">Equivalence tests →</a>
+      <a href="https://github.com/joslo2345/kalman-py/tree/main/tests/comparison">Equivalence tests →</a>
     </td>
     <td width="33%">
       <strong>🧮 Automatic Jacobians</strong><br/><br/>
@@ -256,7 +262,7 @@ axes = plot_estimates(smoothed, labels=["position", "velocity"])
 ## 📊 Benchmarks
 
 Measured against FilterPy (per-step mode) and pykalman (batch mode) on the shared scenarios in
-[`tests/vectors/`](./tests/vectors/README.md), with the same inputs, seeds and precision for every
+[`tests/vectors/`](https://github.com/joslo2345/kalman-py/blob/main/tests/vectors/README.md), with the same inputs, seeds and precision for every
 library. Estimates match in every linear case, so the comparison is about speed, stability and
 features.
 
@@ -276,8 +282,8 @@ cost is the symmetrization that keeps every covariance exactly symmetric.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-stability-dark.svg" />
-    <img src="docs/assets/benchmark-stability-light.svg" alt="Steps before the float32 covariance stops being usable over 1,000,000 steps: square-root form and JAX backend never fail, the textbook filter fails at 67,589, and kalman-py's NumPy default (Joseph form) at 2,753." width="860" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/joslo2345/kalman-py/main/docs/assets/benchmark-stability-dark.svg" />
+    <img src="https://raw.githubusercontent.com/joslo2345/kalman-py/main/docs/assets/benchmark-stability-light.svg" alt="Steps before the float32 covariance stops being usable over 1,000,000 steps: square-root form and JAX backend never fail, the textbook filter fails at 67,589, and kalman-py's NumPy default (Joseph form) at 2,753." width="860" />
   </picture>
 </p>
 
@@ -383,8 +389,8 @@ flowchart LR
 
 | Step | Description |
 |---|---|
-| **Hosted documentation** | Publish the MkDocs site (GitHub Pages) once the repository is public |
-| **Release** | PyPI publishing with trusted publishing, semantic versioning and a changelog; conda-forge once the API is stable |
+| **First PyPI release** | 0.1.0 through the release workflow (trusted publishing), then a conda-forge recipe once the API is stable |
+| **Missing features** | A control input (`B u`), angle-valued UKF states (`x_mean_fn`/`residual_x`), missing measurements in batch mode |
 | **Published benchmarks** | Numbers from a dedicated, frequency-pinned machine, alongside the C, C++ and Rust implementations |
 
 ## 🛠️ Development
@@ -399,7 +405,7 @@ uv sync --all-extras --group docs
 uv run --no-sync mkdocs serve     # documentation at http://127.0.0.1:8000
 ```
 
-CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs lint and types, the tests on
+CI ([`.github/workflows/ci.yml`](https://github.com/joslo2345/kalman-py/blob/main/.github/workflows/ci.yml)) runs lint and types, the tests on
 Python 3.10–3.14 × Linux/macOS/Windows (with JAX, and without it on 3.10 and 3.14), and a
 comparison job. That job runs every pass condition including the slow tests, benchmarks against
 FilterPy and pykalman, and compares speed with the latest `main` run. Timing regressions over
@@ -422,4 +428,4 @@ and [pykalman](https://github.com/pykalman/pykalman), and is built on [NumPy](ht
 
 ## 📄 License
 
-Released under the [MIT License](./LICENSE).
+Released under the [MIT License](https://github.com/joslo2345/kalman-py/blob/main/LICENSE).

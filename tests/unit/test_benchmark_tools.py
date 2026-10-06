@@ -1,11 +1,19 @@
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from benchmarks.baselines.naive import naive_filter
 from kalman_py import KalmanFilter
-from scripts.make_table import make_table, ratio, update_readme
+
+# Benchmark tooling lives in the repository, not in the sdist.
+naive_filter = pytest.importorskip("benchmarks.baselines.naive").naive_filter
+make_table_module = pytest.importorskip("scripts.make_table")
+make_table, ratio, update_readme = (
+    make_table_module.make_table,
+    make_table_module.ratio,
+    make_table_module.update_readme,
+)
 from tests.scenarios import LinearScenario
 
 
@@ -50,12 +58,15 @@ def test_table_has_environment_columns_and_notes() -> None:
 
 def test_update_readme_replaces_only_the_marked_block(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
-    readme.write_text("intro\n<!-- BENCH:START -->\nold\n<!-- BENCH:END -->\noutro\n")
+    readme.write_text(
+        "intro\n<!-- BENCH:START -->\nold\n<!-- BENCH:END -->\noutro\n", encoding="utf-8"
+    )
     update_readme(readme, "new table")
     assert (
-        readme.read_text() == "intro\n<!-- BENCH:START -->\nnew table\n<!-- BENCH:END -->\noutro\n"
+        readme.read_text(encoding="utf-8")
+        == "intro\n<!-- BENCH:START -->\nnew table\n<!-- BENCH:END -->\noutro\n"
     )
-    readme.write_text("no markers")
+    readme.write_text("no markers", encoding="utf-8")
     with pytest.raises(SystemExit):
         update_readme(readme, "x")
 
@@ -110,7 +121,7 @@ def test_benchmark_harness_smoke(tmp_path: Path) -> None:
         check=True,
         cwd=Path(__file__).resolve().parents[2],
     )
-    lines = out.read_text().splitlines()
+    lines = out.read_text(encoding="utf-8").splitlines()
     assert lines[0].startswith("library,library_version,scenario")
     assert len(lines) == 1 + 16
     assert (tmp_path / "notes.md").exists()
@@ -129,7 +140,8 @@ def test_compare_results_flags_regressions_beyond_tolerance(tmp_path: Path) -> N
             header
             + f"ours,1,S1,KF batch,float64,time_per_step,{ours}{rest}"
             + f"ours-numpy,1,S1,KF batch,float64,time_per_step,{variant}{rest}"
-            + f"other,1,S1,KF batch,float64,time_per_step,{other}{rest}"  # not ours: ignored
+            + f"other,1,S1,KF batch,float64,time_per_step,{other}{rest}",  # not ours: ignored
+            encoding="utf-8",
         )
         return path
 
@@ -140,8 +152,13 @@ def test_compare_results_flags_regressions_beyond_tolerance(tmp_path: Path) -> N
         return subprocess.run(
             [sys.executable, str(script), str(base), str(current), "ours", *flags],
             capture_output=True,
-            text=True,
-            env={"PATH": ""},
+            encoding="utf-8",
+            # The real environment (Windows needs SystemRoot to start Python), minus GitHub's
+            # annotation mode, so the report prints the same everywhere.
+            env={
+                **{k: v for k, v in os.environ.items() if k != "GITHUB_ACTIONS"},
+                "PYTHONIOENCODING": "utf-8",
+            },
             check=False,  # the exit status is what's being tested
         )
 
