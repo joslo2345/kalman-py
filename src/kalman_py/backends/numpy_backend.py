@@ -14,16 +14,22 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from kalman_py._typing import Array
-from kalman_py.result import ExtendedFilterResult, FilterResult, SmootherResult
+from kalman_py.result import (
+    ExtendedFilterResult,
+    FilterResult,
+    SmootherResult,
+    UnscentedFilterResult,
+)
 
-TransitionFn = Callable[[Array, float], Array]  # f(x, dt) -> x_next, or its Jacobian
-MeasurementFn = Callable[[Array], Array]  # h(x) -> z_pred, or its Jacobian
-ResidualFn = Callable[[Array, Array], Array]  # residual(z, z_pred) -> innovation
+# Model functions may return any array-like (e.g. JAX arrays); results go through np.asarray.
+TransitionFn = Callable[[Array, float], Any]  # f(x, dt) -> x_next, or its Jacobian
+MeasurementFn = Callable[[Array], Any]  # h(x) -> z_pred, or its Jacobian
+ResidualFn = Callable[[Array, Array], Any]  # residual(z, z_pred) -> innovation
 
 _LOG_2PI = math.log(2 * math.pi)
 
@@ -189,16 +195,87 @@ def ekf_update(
     return _correct(x, P, y, H, R, identity)
 
 
+# ---- Unscented Kalman filter steps ---------------------------------------------------------
+
+
+class SigmaWeights(NamedTuple):
+    """Van der Merwe scaled sigma-point weights for a state of dimension ``n``."""
+
+    mean: Array  # (2n + 1,)
+    cov: Array  # (2n + 1,)
+    gamma: float  # sigma points sit at x +- gamma * (columns of a factor of P)
+
+
+def sigma_weights(
+    n: int, alpha: float, beta: float, kappa: float, dtype: np.dtype[Any]
+) -> SigmaWeights:
+    lam = alpha**2 * (n + kappa) - n
+    if n + lam <= 0:
+        raise ValueError(f"alpha and kappa give n + lambda = {n + lam} <= 0; increase them")
+    mean = np.full(2 * n + 1, 0.5 / (n + lam), dtype=dtype)
+    cov = mean.copy()
+    mean[0] = lam / (n + lam)
+    cov[0] = mean[0] + 1 - alpha**2 + beta
+    return SigmaWeights(mean, cov, math.sqrt(n + lam))
+
+
+def sigma_points(x: Array, P: Array, gamma: float) -> Array:
+    """The ``2n + 1`` sigma points of ``N(x, P)`` as rows: x, x + gamma L_j, x - gamma L_j."""
+    L = gamma * psd_factor(P, "the state covariance")
+    return np.vstack((x, x + L.T, x - L.T))
+
+
+def ukf_predict(
+    x: Array, P: Array, Q: Array, dt: float, f: TransitionFn, w: SigmaWeights
+) -> tuple[Array, Array, Array]:
+    """Unscented prediction; also returns the cross-covariance ``Cov(x_pred, x)``."""
+    chi = sigma_points(x, P, w.gamma)
+    chi_f = np.array([np.asarray(f(c, dt), dtype=P.dtype) for c in chi])
+    x_pred = w.mean @ chi_f
+    d_f, d_x = chi_f - x_pred, chi - x
+    P_pred = _symmetrize((d_f.T * w.cov) @ d_f + Q)
+    return x_pred, P_pred, (d_f.T * w.cov) @ d_x
+
+
+def ukf_update(
+    x: Array,
+    P: Array,
+    z: Array,
+    R: Array,
+    h: MeasurementFn,
+    residual: ResidualFn,
+    w: SigmaWeights,
+) -> Correction:
+    """Unscented measurement update with sigma points redrawn from ``(x, P)``."""
+    chi = sigma_points(x, P, w.gamma)
+    zs = [np.asarray(h(c), dtype=P.dtype) for c in chi]
+    # Average residuals relative to the central point instead of the raw values: for plain
+    # subtraction this is the usual weighted mean, and with a wrapping residual it stays correct
+    # for angles near +-pi, where a raw weighted mean of e.g. +3.1 and -3.1 rad would give ~0.
+    d_z = np.array([np.asarray(residual(zi, zs[0]), dtype=P.dtype) for zi in zs])
+    mean_offset = w.mean @ d_z
+    z_pred = zs[0] + mean_offset
+    d_z = d_z - mean_offset
+    d_x = chi - x
+
+    S = (d_z.T * w.cov) @ d_z + R
+    P_xz = (d_x.T * w.cov) @ d_z
+    K = np.linalg.solve(S, P_xz.T).T  # P_xz S^-1, with S symmetric
+    y = np.asarray(residual(z, z_pred), dtype=P.dtype)
+    return Correction(x + K @ y, _symmetrize(P - K @ S @ K.T), y, S)
+
+
 # ---- Batch filtering -----------------------------------------------------------------------
 
 # One filter step from (x, C), with C the covariance or its factor:
-# returns (x_pred, C_pred, correction, transition_matrix).
+# returns (x_pred, C_pred, correction, transition), where transition is the (linearized)
+# transition matrix for the KF/EKF or the cross-covariance Cov(x_pred, x) for the UKF.
 _Step = Callable[[int, Array, Array], tuple[Array, Array, Correction, Array]]
 
 
 class _Run(NamedTuple):
     result: FilterResult[Array]
-    jacobians: Array
+    transitions: Array  # (T, n, n), see _Step
 
 
 def _run_filter(x0: Array, C0: Array, zs: Array, step: _Step, square_root: bool) -> _Run:
@@ -208,14 +285,14 @@ def _run_filter(x0: Array, C0: Array, zs: Array, step: _Step, square_root: bool)
     covs = np.empty((T, n, n), dtype=dtype)
     predicted_means = np.empty((T, n), dtype=dtype)
     predicted_covs = np.empty((T, n, n), dtype=dtype)
-    jacobians = np.empty((T, n, n), dtype=dtype)
+    transitions = np.empty((T, n, n), dtype=dtype)
     innovations = np.empty((T, m), dtype=dtype)
     innovation_covs = np.empty((T, m, m), dtype=dtype)
 
     x, C = x0, C0
     for k in range(T):
-        predicted_means[k], C_pred, (x, C, innovations[k], innovation_covs[k]), jacobians[k] = step(
-            k, x, C
+        predicted_means[k], C_pred, (x, C, innovations[k], innovation_covs[k]), transitions[k] = (
+            step(k, x, C)
         )
         if square_root:
             predicted_covs[k], covs[k] = C_pred @ C_pred.T, C @ C.T
@@ -225,7 +302,7 @@ def _run_filter(x0: Array, C0: Array, zs: Array, step: _Step, square_root: bool)
 
     nis, log_likelihood = _innovation_stats(innovations, innovation_covs, square_root)
     result = FilterResult(means, covs, predicted_means, predicted_covs, nis, log_likelihood)
-    return _Run(result, jacobians)
+    return _Run(result, transitions)
 
 
 def kalman_filter(
@@ -342,7 +419,44 @@ def ekf_filter(
     run = _run_filter(x0, C0, zs, step, square_root)
     r = run.result
     return ExtendedFilterResult(
-        r.means, r.covs, r.predicted_means, r.predicted_covs, r.nis, r.log_likelihood, run.jacobians
+        r.means,
+        r.covs,
+        r.predicted_means,
+        r.predicted_covs,
+        r.nis,
+        r.log_likelihood,
+        run.transitions,
+    )
+
+
+def ukf_filter(
+    Q: Array,
+    R: Array,
+    x0: Array,
+    P0: Array,
+    zs: Array,
+    dts: Array,
+    f: TransitionFn,
+    h: MeasurementFn,
+    residual: ResidualFn,
+    w: SigmaWeights,
+) -> UnscentedFilterResult[Array]:
+    """Unscented Kalman filter over every row of ``zs``; ``dts[k]`` is the step before ``zs[k]``."""
+
+    def step(k: int, x: Array, P: Array) -> tuple[Array, Array, Correction, Array]:
+        x_pred, P_pred, cross = ukf_predict(x, P, Q, float(dts[k]), f, w)
+        return x_pred, P_pred, ukf_update(x_pred, P_pred, zs[k], R, h, residual, w), cross
+
+    run = _run_filter(x0, P0, zs, step, False)
+    r = run.result
+    return UnscentedFilterResult(
+        r.means,
+        r.covs,
+        r.predicted_means,
+        r.predicted_covs,
+        r.nis,
+        r.log_likelihood,
+        run.transitions,
     )
 
 
@@ -352,14 +466,22 @@ def rts_smoother(F: Array, result: FilterResult[Array]) -> SmootherResult[Array]
     ``F`` is the transition matrix, or a ``(T, n, n)`` stack where ``F[k]`` is the (linearized)
     transition into step ``k``, as the EKF stores it.
     """
+    # Cov(x_{k+1}^-, x_k) = F_{k+1} P_k for a (linearized) linear transition.
+    F_next = F if F.ndim == 2 else F[1:]
+    return rts_smoother_from_cross(F_next @ result.covs[:-1], result)
+
+
+def rts_smoother_from_cross(cross: Array, result: FilterResult[Array]) -> SmootherResult[Array]:
+    """RTS backward pass given ``cross[k] = Cov(x_{k+1}^-, x_k | z_1..z_k)``, shape (T-1, n, n).
+
+    This covers every filter: ``F P`` for the KF and EKF, a sigma-point estimate for the UKF.
+    """
     means = result.means.copy()
     covs = result.covs.copy()
     for k in range(means.shape[0] - 2, -1, -1):
-        P = result.covs[k]
         P_pred = result.predicted_covs[k + 1]
-        F_k = F if F.ndim == 2 else F[k + 1]
-        # G = P F' P_pred^-1 = (P_pred^-1 F P)' since P and P_pred are symmetric.
-        G = np.linalg.solve(P_pred, F_k @ P).T
+        # G = Cov(x_k, x_{k+1}^-) P_pred^-1 = (P_pred^-1 cross_k)' since P_pred is symmetric.
+        G = np.linalg.solve(P_pred, cross[k]).T
         means[k] = result.means[k] + G @ (means[k + 1] - result.predicted_means[k + 1])
-        covs[k] = _symmetrize(P + G @ (covs[k + 1] - P_pred) @ G.T)
+        covs[k] = _symmetrize(result.covs[k] + G @ (covs[k + 1] - P_pred) @ G.T)
     return SmootherResult(means, covs)

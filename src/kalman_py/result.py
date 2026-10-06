@@ -36,6 +36,13 @@ class ExtendedFilterResult(FilterResult[A]):
 
 
 @dataclass(frozen=True)
+class UnscentedFilterResult(FilterResult[A]):
+    """:class:`FilterResult` plus the sigma-point cross-covariances the smoother needs."""
+
+    cross_covariances: A  # (T, n, n): row k is Cov(x_k^-, x_{k-1} | z_1..z_{k-1})
+
+
+@dataclass(frozen=True)
 class SmootherResult(Generic[A]):
     """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``."""
 
