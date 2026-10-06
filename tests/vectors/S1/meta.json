@@ -1,0 +1,82 @@
+{
+  "id": "S1",
+  "description": "1-D constant velocity; position measured",
+  "filters": [
+    "KF"
+  ],
+  "seeds": [
+    1
+  ],
+  "dt": 0.1,
+  "precision": "float64",
+  "measurement_model": "linear",
+  "model": {
+    "F": [
+      [
+        1.0,
+        0.1
+      ],
+      [
+        0.0,
+        1.0
+      ]
+    ],
+    "H": [
+      [
+        1.0,
+        0.0
+      ]
+    ],
+    "Q": [
+      [
+        0.00016666666666666672,
+        0.0025000000000000005
+      ],
+      [
+        0.0025000000000000005,
+        0.05
+      ]
+    ],
+    "R": [
+      [
+        0.25
+      ]
+    ],
+    "x0": [
+      0.0,
+      1.0
+    ],
+    "P0": [
+      [
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "files": {
+    "truth": {
+      "path": "truth.f64",
+      "dtype": "float64-le",
+      "shape": [
+        1,
+        10000,
+        2
+      ],
+      "sha256": "f35ce702a9c6e4b876416535a9553609666c94c9e01386ef25d0faa8900d57cd"
+    },
+    "measurements": {
+      "path": "measurements.f64",
+      "dtype": "float64-le",
+      "shape": [
+        1,
+        10000,
+        1
+      ],
+      "sha256": "3eeb436e4c44019ab535dd2f1aab0b11e7f0199a77c70dfea63cb8946eeb302b"
+    }
+  }
+}
