@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -152,7 +153,12 @@ def test_compare_results_flags_regressions_beyond_tolerance(tmp_path: Path) -> N
             [sys.executable, str(script), str(base), str(current), "ours", *flags],
             capture_output=True,
             encoding="utf-8",
-            env={"PATH": "", "PYTHONIOENCODING": "utf-8"},
+            # The real environment (Windows needs SystemRoot to start Python), minus GitHub's
+            # annotation mode, so the report prints the same everywhere.
+            env={
+                **{k: v for k, v in os.environ.items() if k != "GITHUB_ACTIONS"},
+                "PYTHONIOENCODING": "utf-8",
+            },
             check=False,  # the exit status is what's being tested
         )
 
