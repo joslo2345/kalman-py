@@ -11,3 +11,10 @@ wheels/
 
 # Hypothesis example database
 .hypothesis/
+
+# Extra local environments (e.g. other Python versions) and CI outputs
+.venv-*/
+coverage.xml
+.coverage
+ci-results/
+baseline/

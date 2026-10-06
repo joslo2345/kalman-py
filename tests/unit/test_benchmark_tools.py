@@ -114,3 +114,43 @@ def test_benchmark_harness_smoke(tmp_path: Path) -> None:
     assert lines[0].startswith("library,library_version,scenario")
     assert len(lines) == 1 + 16
     assert (tmp_path / "notes.md").exists()
+
+
+def test_compare_results_flags_regressions_beyond_tolerance(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+
+    header = "library,library_version,scenario,filter,precision,metric,value,unit,commit,cpu,os,toolchain,date\n"
+    rest = ",ns,c,cpu,os,tool,date\n"
+
+    def write(name: str, ours: float, variant: float, other: float) -> Path:
+        path = tmp_path / name
+        path.write_text(
+            header
+            + f"ours,1,S1,KF batch,float64,time_per_step,{ours}{rest}"
+            + f"ours-numpy,1,S1,KF batch,float64,time_per_step,{variant}{rest}"
+            + f"other,1,S1,KF batch,float64,time_per_step,{other}{rest}"  # not ours: ignored
+        )
+        return path
+
+    base = write("base.csv", 100.0, 100.0, 100.0)
+    script = Path(__file__).resolve().parents[2] / "scripts" / "compare_results.py"
+
+    def run(current: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(script), str(base), str(current), "ours", *flags],
+            capture_output=True,
+            text=True,
+            env={"PATH": ""},
+            check=False,  # the exit status is what's being tested
+        )
+
+    within = write("within.csv", 109.0, 95.0, 500.0)
+    assert run(within, "--fail").returncode == 0
+
+    slower = write("slower.csv", 100.0, 120.0, 100.0)
+    report = run(slower)
+    assert report.returncode == 0  # report-only by default
+    assert "| ours-numpy | S1 | KF batch | 100.0 | 120.0 | +20.0% ⚠️ |" in report.stdout
+    assert "other" not in report.stdout
+    assert run(slower, "--fail").returncode == 1

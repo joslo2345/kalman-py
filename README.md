@@ -81,11 +81,21 @@ out of the box, and on an optional **JAX** backend that compiles the whole time 
   </tr>
   <tr>
     <td align="right" valign="top">
-      <img src="https://img.shields.io/badge/next-CI%2C_docs%2C_PyPI-6c757d?style=flat-square" alt="next" />
+      <img src="https://img.shields.io/badge/ready-CI-17a2b8?style=flat-square" alt="ready" />
     </td>
     <td valign="top">
-      Continuous integration across Python versions and platforms, MkDocs documentation and
-      notebooks, and a first PyPI release. See the <a href="#-roadmap">roadmap</a>.
+      <strong>GitHub Actions workflow</strong> for Python 3.10–3.14 on Linux, macOS and Windows,
+      with and without JAX, plus a comparison report. Not run on GitHub yet: the repository has
+      no remote so far.
+    </td>
+  </tr>
+  <tr>
+    <td align="right" valign="top">
+      <img src="https://img.shields.io/badge/next-docs%2C_PyPI-6c757d?style=flat-square" alt="next" />
+    </td>
+    <td valign="top">
+      MkDocs documentation and notebooks, and a first PyPI release. See the
+      <a href="#-roadmap">roadmap</a>.
     </td>
   </tr>
 </table>
@@ -361,7 +371,6 @@ flowchart LR
 
 | Step | Description |
 |---|---|
-| **Continuous integration** | GitHub Actions on Python 3.10+ across Linux, macOS and Windows, with and without JAX; ruff, mypy, coverage, and benchmark regression checks |
 | **Documentation** | MkDocs Material with an API reference, notebook tutorials (tracking, sensor fusion, noise learning) and a migration guide from FilterPy |
 | **Release** | PyPI publishing with trusted publishing, semantic versioning and a changelog; conda-forge once the API is stable |
 | **Published benchmarks** | Numbers from a dedicated, frequency-pinned machine, alongside the C, C++ and Rust implementations |
@@ -369,11 +378,18 @@ flowchart LR
 ## 🛠️ Development
 
 ```bash
-uv sync --all-extras
+uv sync --all-extras          # add --group docs for the documentation tools
 uv run pytest                 # fast tests
 uv run pytest -m ""           # everything, including slow comparison tests
 uv run ruff check && uv run ruff format --check && uv run mypy src tests
 ```
+
+CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs lint and types, the tests on
+Python 3.10–3.14 × Linux/macOS/Windows (with JAX, and without it on 3.10 and 3.14), and a
+comparison job. That job runs every pass condition including the slow tests, benchmarks against
+FilterPy and pykalman, and compares speed with the latest `main` run. Timing regressions over
+10% are reported as warnings, because shared runners vary by 10–20%; set `REGRESSION_MODE` to
+`--fail` to turn them into errors.
 
 - 🐞 **Found a bug?** Open an issue with a minimal reproduction.
 - 🧪 **Changing numerics?** The equivalence tests against FilterPy and pykalman and the stability

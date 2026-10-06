@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Shared runners vary by 10-20%, so speed regressions only warn. Set to "--fail" to gate.
+  REGRESSION_MODE: ""
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - run: uv run --no-sync ruff check
+      - run: uv run --no-sync ruff format --check
+      - run: uv run --no-sync mypy src tests
+
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }}, ${{ matrix.jax && 'with JAX' || 'no JAX' }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        jax: [true]
+        include:
+          # Without JAX on the oldest and newest Python, on every OS.
+          - { os: ubuntu-latest, python: "3.10", jax: false }
+          - { os: ubuntu-latest, python: "3.14", jax: false }
+          - { os: macos-latest, python: "3.10", jax: false }
+          - { os: macos-latest, python: "3.14", jax: false }
+          - { os: windows-latest, python: "3.10", jax: false }
+          - { os: windows-latest, python: "3.14", jax: false }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - name: Install
+        shell: bash
+        run: uv sync --locked --extra plot ${{ matrix.jax && '--extra jax' || '' }}
+      - name: Check JAX presence
+        shell: bash
+        run: |
+          uv run --no-sync python -c "import importlib.util as u, sys; \
+            has = u.find_spec('jax') is not None; print('jax installed:', has); \
+            sys.exit(has != ('${{ matrix.jax }}' == 'true'))"
+      # --no-sync: a plain `uv run` would re-sync the environment and drop the extras.
+      - name: Test
+        run: uv run --no-sync pytest --cov=kalman_py --cov-report=term-missing --cov-report=xml
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  comparison:
+    # The guide's comparison report: every pass condition (slow tests included) plus benchmark
+    # numbers against FilterPy and pykalman, published as the job summary and an artifact.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - name: Full test suite (fails the build if any pass condition breaks)
+        run: |
+          set -o pipefail
+          uv run --no-sync pytest -m "" -s -p no:cacheprovider | tee pytest.log
+      - name: Benchmarks
+        run: |
+          ENV="${GITHUB_SHA::7},$(uname -m) GitHub runner,${RUNNER_OS},python-$(uv run --no-sync python -c 'import platform; print(platform.python_version())'),$(date -I)"
+          uv run --no-sync python benchmarks/run.py "$ENV" --repeats 10 --out ci-results/results.csv
+          uv run --no-sync python benchmarks/accuracy.py "$ENV" --out ci-results/results.csv
+      - name: Restore baseline from the latest main run
+        uses: actions/cache/restore@v4
+        with:
+          path: baseline/results.csv
+          key: bench-baseline-${{ github.sha }}
+          restore-keys: bench-baseline-
+      - name: Write comparison report
+        run: |
+          {
+            echo "## Comparison report"
+            echo
+            echo "### Pass conditions"
+            echo
+            grep -o '\[report\].*' pytest.log | sed 's/^\[report\] /- /' || true
+            echo
+            echo "### Benchmarks (shared runner: timings are noisy)"
+            echo
+            uv run --no-sync python scripts/make_table.py ci-results/results.csv kalman-py
+            echo
+            echo "### Speed vs latest main"
+            echo
+            if [ -f baseline/results.csv ]; then
+              uv run --no-sync python scripts/compare_results.py baseline/results.csv \
+                ci-results/results.csv kalman-py $REGRESSION_MODE
+            else
+              echo "No baseline yet: one is saved by the first run on main."
+            fi
+          } | tee comparison.md
+          cat comparison.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comparison
+          path: |
+            comparison.md
+            ci-results/
+      - name: Save these results as the new baseline
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: mkdir -p baseline && cp ci-results/results.csv baseline/results.csv
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: baseline/results.csv
+          key: bench-baseline-${{ github.sha }}

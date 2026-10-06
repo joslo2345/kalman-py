@@ -43,8 +43,6 @@ addopts = "-m 'not slow'"
 dev = [
     "filterpy>=1.4.5",
     "hypothesis>=6.168.5",
-    "mkdocs-material>=9.7.7",
-    "mkdocstrings[python]>=1.0.6",
     "mypy>=2.4.0",
     "pykalman>=0.11.2",
     "pytest>=9.1.1",
@@ -52,4 +50,8 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.10",
     "scipy>=1.15.3",
+]
+docs = [
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
 ]

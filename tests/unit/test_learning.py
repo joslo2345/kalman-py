@@ -35,13 +35,15 @@ def test_em_never_decreases_the_likelihood(cv_scenario: LinearScenario) -> None:
     assert fit.history[-1] > fit.history[0]
 
 
-def test_reported_log_likelihood_matches_the_filter(cv_scenario: LinearScenario) -> None:
+@pytest.mark.parametrize("method", ["em", "gradient"])
+def test_reported_log_likelihood_matches_the_filter(
+    cv_scenario: LinearScenario, method: Method
+) -> None:
+    if method == "gradient":
+        pytest.importorskip("jax")
     sc = cv_scenario
-    for method in ("em", "gradient"):
-        fit = fit_noise(sc.F, sc.H, sc.zs, sc.x0, sc.P0, method=method, max_iter=20)
-        np.testing.assert_allclose(
-            fit.log_likelihood, our_log_likelihood(sc, fit.Q, fit.R), rtol=1e-12
-        )
+    fit = fit_noise(sc.F, sc.H, sc.zs, sc.x0, sc.P0, method=method, max_iter=20)
+    np.testing.assert_allclose(fit.log_likelihood, our_log_likelihood(sc, fit.Q, fit.R), rtol=1e-12)
 
 
 def test_em_and_gradient_reach_the_same_maximum() -> None:
