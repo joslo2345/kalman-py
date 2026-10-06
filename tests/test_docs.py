@@ -7,8 +7,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGES = sorted(p for p in (ROOT / "docs").rglob("*.md") if "```python" in p.read_text())
+PAGES = sorted(
+    p for p in (ROOT / "docs").rglob("*.md") if "```python" in p.read_text(encoding="utf-8")
+)
 NOTEBOOKS = sorted((ROOT / "examples").glob("*.ipynb"))
+if not PAGES:
+    pytest.skip("documentation sources are not available", allow_module_level=True)
 
 
 def test_documentation_has_runnable_pages_and_notebooks() -> None:
@@ -24,7 +28,9 @@ def test_page_examples_run(page: Path) -> None:
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     namespace: dict[str, object] = {}
-    for block in re.findall(r"```python\n(.*?)```", page.read_text(), flags=re.DOTALL):
+    for block in re.findall(
+        r"```python\n(.*?)```", page.read_text(encoding="utf-8"), flags=re.DOTALL
+    ):
         exec(compile(block, str(page), "exec"), namespace)  # noqa: S102 (our own docs)
 
 

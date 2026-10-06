@@ -1,0 +1,92 @@
+name: Release
+
+# Publishing a GitHub release (tag vX.Y.Z) builds, checks and tests the distributions, then
+# uploads them to PyPI with trusted publishing: no API token is stored anywhere. A manual run can
+# publish to TestPyPI instead, as a rehearsal.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Publish the build to TestPyPI (rehearsal) or only build and check it
+        type: choice
+        options: [none, testpypi]
+        default: none
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: The release tag must match the package version
+        if: github.event_name == 'release'
+        run: |
+          version="$(uv version --short)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::release tag ${GITHUB_REF_NAME} does not match pyproject version ${version}"
+            exit 1
+          fi
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Check the metadata PyPI will render
+        run: uvx twine check --strict dist/*
+      - name: The wheel installs and works in a clean environment
+        run: |
+          uv venv /tmp/wheel-env
+          VIRTUAL_ENV=/tmp/wheel-env uv pip install dist/*.whl
+          /tmp/wheel-env/bin/python -c "
+          import numpy as np, kalman_py
+          kf = kalman_py.KalmanFilter([[1.0]], [[1.0]], [[0.1]], [[1.0]], [0.0], [[1.0]])
+          print(kalman_py.__name__, kf.filter(np.ones((5, 1))).means[-1])"
+      - name: The test suite passes from the sdist
+        run: |
+          mkdir /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          cd /tmp/sdist
+          uv venv
+          uv pip install ".[jax,plot]" pytest hypothesis scipy filterpy pykalman
+          .venv/bin/python -m pytest -q
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-pypi:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/kalman-py
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/kalman-py
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -87,24 +88,28 @@ def make_table(rows: list[dict[str, str]], ours: str, notes: list[str]) -> str:
 
 
 def update_readme(readme: Path, table: str) -> None:
-    text = readme.read_text()
+    text = readme.read_text(encoding="utf-8")
     pattern = re.compile(re.escape(START) + r".*?" + re.escape(END), re.DOTALL)
     if not pattern.search(text):
         raise SystemExit(f"{readme} has no {START} ... {END} block")
-    readme.write_text(pattern.sub(lambda _: f"{START}\n{table}\n{END}", text, count=1))
+    readme.write_text(
+        pattern.sub(lambda _: f"{START}\n{table}\n{END}", text, count=1), encoding="utf-8"
+    )
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # the output has non-ASCII (e.g. ⚠️, –) on Windows
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("csv", type=Path)
     parser.add_argument("ours")
     parser.add_argument("--readme", type=Path)
     args = parser.parse_args()
 
-    with args.csv.open(newline="") as f:
+    with args.csv.open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     notes_file = args.csv.with_name("notes.md")
-    notes = notes_file.read_text().splitlines() if notes_file.exists() else []
+    notes = notes_file.read_text(encoding="utf-8").splitlines() if notes_file.exists() else []
     table = make_table(rows, args.ours, notes)
     if args.readme:
         update_readme(args.readme, table)

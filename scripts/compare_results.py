@@ -22,7 +22,7 @@ Key = tuple[str, str, str, str]
 
 
 def timings(path: Path, ours: str) -> dict[Key, float]:
-    with path.open(newline="") as f:
+    with path.open(newline="", encoding="utf-8") as f:
         return {
             (r["library"], r["scenario"], r["filter"], r["precision"]): float(r["value"])
             for r in csv.DictReader(f)
@@ -31,6 +31,8 @@ def timings(path: Path, ours: str) -> dict[Key, float]:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # the output has non-ASCII (e.g. ⚠️, –) on Windows
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("baseline", type=Path)
     parser.add_argument("current", type=Path)

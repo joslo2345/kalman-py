@@ -9,7 +9,7 @@ README = Path(__file__).resolve().parents[1] / "README.md"
 
 
 def python_blocks() -> list[str]:
-    return re.findall(r"```python\n(.*?)```", README.read_text(), flags=re.DOTALL)
+    return re.findall(r"```python\n(.*?)```", README.read_text(encoding="utf-8"), flags=re.DOTALL)
 
 
 def test_readme_has_examples() -> None:

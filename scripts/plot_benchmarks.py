@@ -45,7 +45,7 @@ SCENARIOS = {"S1": "S1 · 1-D CV (2/1)", "S2": "S2 · 2-D CV (4/2)", "S5": "S5 �
 
 def load(path: Path) -> dict[tuple[str, str, str, str], float]:
     values = {}
-    with path.open(newline="") as f:
+    with path.open(newline="", encoding="utf-8") as f:
         for r in csv.DictReader(f):
             values[(r["scenario"], r["filter"], r["metric"], r["library"])] = float(r["value"])
     return values

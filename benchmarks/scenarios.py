@@ -68,7 +68,7 @@ class Scenario:
 def load(sid: str, root: Path = VECTORS, verify: bool = True) -> Scenario:
     """Load scenario ``sid`` (e.g. "S2"), checking every file's SHA-256 against meta.json."""
     directory = root / sid
-    meta = json.loads((directory / "meta.json").read_text())
+    meta = json.loads((directory / "meta.json").read_text(encoding="utf-8"))
     arrays = {}
     for name, info in meta["files"].items():
         raw = (directory / info["path"]).read_bytes()

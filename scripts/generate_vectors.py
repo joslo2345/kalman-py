@@ -112,7 +112,7 @@ def write_scenario(
         },
         "files": files,
     }
-    (directory / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (directory / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     print(f"{sid}: wrote {', '.join(f['path'] for f in files.values())}")
 
 
