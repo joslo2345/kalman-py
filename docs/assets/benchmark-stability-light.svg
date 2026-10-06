@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="756pt" height="187.2pt" viewBox="0 0 756 187.2" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-05T23:50:44.601733</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 187.2 
+L 756 187.2 
+L 756 0 
+L 0 0 
+L 0 187.2 
+z
+" style="fill: none; opacity: 0"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 181.1825 147.841891 
+L 745.2 147.841891 
+L 745.2 26.777539 
+L 181.1825 26.777539 
+L 181.1825 147.841891 
+z
+" style="fill: none"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 181.1825 147.841891 
+L 181.1825 26.777539 
+" clip-path="url(#p006882ec09)" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2"/>
+     <g id="text_1">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #59636e" x="181.1825" y="158.180484" transform="rotate(-0 181.1825 158.180484)">0k</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 289.647404 147.841891 
+L 289.647404 26.777539 
+" clip-path="url(#p006882ec09)" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4"/>
+     <g id="text_2">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #59636e" x="289.647404" y="158.180484" transform="rotate(-0 289.647404 158.180484)">250k</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 398.112308 147.841891 
+L 398.112308 26.777539 
+" clip-path="url(#p006882ec09)" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6"/>
+     <g id="text_3">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #59636e" x="398.112308" y="158.180484" transform="rotate(-0 398.112308 158.180484)">500k</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 506.577212 147.841891 
+L 506.577212 26.777539 
+" clip-path="url(#p006882ec09)" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8"/>
+     <g id="text_4">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #59636e" x="506.577212" y="158.180484" transform="rotate(-0 506.577212 158.180484)">750k</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 615.042115 147.841891 
+L 615.042115 26.777539 
+" clip-path="url(#p006882ec09)" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10"/>
+     <g id="text_5">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #59636e" x="615.042115" y="158.179781" transform="rotate(-0 615.042115 158.179781)">1M</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_11"/>
+     <g id="text_6">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #59636e" x="177.6825" y="45.12466" transform="rotate(-0 177.6825 45.12466)">kalman-py, square_root=True</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_12"/>
+     <g id="text_7">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #59636e" x="177.6825" y="75.527561" transform="rotate(-0 177.6825 75.527561)">kalman-py, JAX backend</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_13"/>
+     <g id="text_8">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #59636e" x="177.6825" y="105.930462" transform="rotate(-0 177.6825 105.930462)">Textbook filter (P = (I − KH)P)</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_14"/>
+     <g id="text_9">
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #59636e" x="177.6825" y="136.333363" transform="rotate(-0 177.6825 136.333363)">kalman-py, NumPy default (Joseph)</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 181.1825 32.280464 
+L 615.042115 32.280464 
+L 615.042115 51.130263 
+L 181.1825 51.130263 
+z
+" clip-path="url(#p006882ec09)" style="fill: #eb6834"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 181.1825 62.683365 
+L 615.042115 62.683365 
+L 615.042115 81.533164 
+L 181.1825 81.533164 
+z
+" clip-path="url(#p006882ec09)" style="fill: #2a78d6"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 181.1825 93.086266 
+L 210.506638 93.086266 
+L 210.506638 111.936065 
+L 181.1825 111.936065 
+z
+" clip-path="url(#p006882ec09)" style="fill: #8a8985"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 181.1825 123.489167 
+L 182.376916 123.489167 
+L 182.376916 142.338966 
+L 181.1825 142.338966 
+z
+" clip-path="url(#p006882ec09)" style="fill: #eb6834"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 181.1825 147.841891 
+L 745.2 147.841891 
+" style="fill: none; stroke: #d8dee4; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #1f2328" x="619.380712" y="43.913703" transform="rotate(-0 619.380712 43.913703)">1,000,000 · never failed</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #1f2328" x="619.380712" y="74.316604" transform="rotate(-0 619.380712 74.316604)">1,000,000 · never failed</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #1f2328" x="214.845234" y="104.719173" transform="rotate(-0 214.845234 104.719173)">67,589</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #1f2328" x="186.715512" y="135.122074" transform="rotate(-0 186.715512 135.122074)">2,753</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #1f2328" x="181.1825" y="18.777539" transform="rotate(-0 181.1825 18.777539)">S4 · float32 stability: steps before the covariance stops being usable</text>
+   </g>
+  </g>
+  <g id="text_15">
+   <text style="font-size: 8.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #59636e" x="7.56" y="183.456" transform="rotate(-0 7.56 183.456)">1,000,000 ill-conditioned steps in float32 (higher is better). FilterPy: n/a, it converts float32 to float64.</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p006882ec09">
+   <rect x="181.1825" y="26.777539" width="564.0175" height="121.064352"/>
+  </clipPath>
+ </defs>
+</svg>
