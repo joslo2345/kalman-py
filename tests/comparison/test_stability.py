@@ -4,7 +4,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from kalman_py import KalmanFilter
-from kalman_py.linear import Backend
+from kalman_py._common import Backend
 from tests.scenarios import make_random_linear
 
 

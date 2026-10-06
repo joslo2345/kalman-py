@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from kalman_py import KalmanFilter
+from kalman_py import ExtendedKalmanFilter, KalmanFilter
 from tests.scenarios import LinearScenario
 
 filterpy_kalman = pytest.importorskip("filterpy.kalman")
@@ -62,3 +62,44 @@ def test_smoother_matches_pykalman(cv_scenario: LinearScenario) -> None:
 
     np.testing.assert_allclose(ours.means, means, rtol=1e-9, atol=1e-12)
     np.testing.assert_allclose(ours.covs, covs, rtol=1e-9, atol=1e-12)
+
+
+def test_ekf_matches_filterpy_on_range_bearing() -> None:
+    pytest.importorskip("jax")
+    from tests.nonlinear_scenarios import (
+        cv_f,
+        make_range_bearing,
+        range_bearing_h,
+        range_bearing_h_jacobian,
+        wrap_bearing_residual,
+    )
+
+    sc = make_range_bearing()
+    ours = ExtendedKalmanFilter(
+        f=cv_f,
+        h=range_bearing_h,
+        Q=sc.Q,
+        R=sc.R,
+        x0=sc.x0,
+        P0=sc.P0,
+        residual_z=wrap_bearing_residual,
+    ).filter(sc.zs, dt=1.0)
+
+    fp = filterpy_kalman.ExtendedKalmanFilter(dim_x=4, dim_z=2)
+    fp.F, fp.Q, fp.R = sc.F, sc.Q, sc.R
+    fp.x, fp.P = sc.x0.reshape(-1, 1).copy(), sc.P0.copy()
+
+    def hx(x: np.ndarray) -> np.ndarray:
+        return np.asarray(range_bearing_h(x.ravel())).reshape(-1, 1)
+
+    def h_jacobian(x: np.ndarray) -> np.ndarray:
+        return range_bearing_h_jacobian(x.ravel())
+
+    def residual(z: np.ndarray, z_pred: np.ndarray) -> np.ndarray:
+        return np.asarray(wrap_bearing_residual(z.ravel(), z_pred.ravel())).reshape(-1, 1)
+
+    for k, z in enumerate(sc.zs):
+        fp.predict()
+        fp.update(z.reshape(-1, 1), h_jacobian, hx, residual=residual)
+        np.testing.assert_allclose(ours.means[k], fp.x.ravel(), rtol=1e-9, atol=1e-9)
+        np.testing.assert_allclose(ours.covs[k], fp.P, rtol=1e-9, atol=1e-12)

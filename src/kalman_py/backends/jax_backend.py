@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import jax
@@ -26,7 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from kalman_py.result import FilterResult, SmootherResult
+from kalman_py.result import ExtendedFilterResult, FilterResult, SmootherResult
 
 _LOG_2PI = math.log(2 * math.pi)
 
@@ -42,6 +44,7 @@ def _register_pytree(cls: type) -> None:
 
 
 _register_pytree(FilterResult)
+_register_pytree(ExtendedFilterResult)
 _register_pytree(SmootherResult)
 
 
@@ -97,8 +100,13 @@ def _predict(x: jax.Array, P: jax.Array, F: jax.Array, Q: jax.Array) -> tuple[ja
 def _update(
     x: jax.Array, P: jax.Array, z: jax.Array, H: jax.Array, R: jax.Array
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    # Mirrors numpy_backend.update; see the comments there.
-    y = z - _mm(H, x)
+    return _correct(x, P, z - _mm(H, x), H, R)
+
+
+def _correct(
+    x: jax.Array, P: jax.Array, y: jax.Array, H: jax.Array, R: jax.Array
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    # Mirrors numpy_backend._correct; see the comments there.
     HP = _mm(H, P)
     S = _symmetrize(_mm(HP, H.T) + R)
     sol, logdet = _solve_spd(S, jnp.column_stack((HP, y)))
@@ -110,6 +118,15 @@ def _update(
 
     log_likelihood = -0.5 * (nis + logdet + y.shape[0] * _LOG_2PI)
     return x + _mm(K, y), P_post, nis, log_likelihood
+
+
+def jacobian(fn: Callable[..., Any]) -> Callable[..., jax.Array]:
+    """Jitted forward-mode Jacobian of ``fn`` with respect to its first argument."""
+    return jax.jit(jax.jacfwd(fn))
+
+
+def _subtract(a: jax.Array, b: jax.Array) -> jax.Array:
+    return a - b
 
 
 @jax.jit
@@ -133,15 +150,59 @@ def _kalman_filter(
     return FilterResult(means, covs, pred_means, pred_covs, nis, lls.sum())
 
 
+@partial(jax.jit, static_argnames=("f", "h", "jac_f", "jac_h", "residual"))
+def _ekf_filter(
+    Q: jax.Array,
+    R: jax.Array,
+    x0: jax.Array,
+    P0: jax.Array,
+    zs: jax.Array,
+    dts: jax.Array,
+    *,
+    f: Callable[[jax.Array, jax.Array], jax.Array],
+    h: Callable[[jax.Array], jax.Array],
+    jac_f: Callable[[jax.Array, jax.Array], jax.Array] | None,
+    jac_h: Callable[[jax.Array], jax.Array] | None,
+    residual: Callable[[jax.Array, jax.Array], jax.Array] | None,
+) -> ExtendedFilterResult[jax.Array]:
+    # The model functions are static: jit caches compiled code per function object, so passing
+    # the same module-level functions to many filters compiles once.
+    jac_f_ = jac_f or jax.jacfwd(f)
+    jac_h_ = jac_h or jax.jacfwd(h)
+    residual_ = residual or _subtract
+
+    def step(
+        carry: tuple[jax.Array, jax.Array], inputs: tuple[jax.Array, jax.Array]
+    ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, ...]]:
+        x, P = carry
+        z, dt = inputs
+        F = jnp.asarray(jac_f_(x, dt), dtype=P.dtype)
+        x_pred = jnp.asarray(f(x, dt), dtype=P.dtype)
+        P_pred = _symmetrize(_mm(_mm(F, P), F.T) + Q)
+        H = jnp.asarray(jac_h_(x_pred), dtype=P.dtype)
+        y = jnp.asarray(residual_(z, jnp.asarray(h(x_pred), dtype=P.dtype)), dtype=P.dtype)
+        x, P, nis, ll = _correct(x_pred, P_pred, y, H, R)
+        return (x, P), (x, P, x_pred, P_pred, nis, ll, F)
+
+    _, (means, covs, pred_means, pred_covs, nis, lls, jacobians) = jax.lax.scan(
+        step, (x0, P0), (zs, dts)
+    )
+    return ExtendedFilterResult(means, covs, pred_means, pred_covs, nis, lls.sum(), jacobians)
+
+
 @jax.jit
 def _rts_smoother(F: jax.Array, result: FilterResult[jax.Array]) -> SmootherResult[jax.Array]:
+    # F is either the transition matrix or a (T, n, n) stack of per-step Jacobians (EKF).
+    per_step = F.ndim == 3
+
     def step(
         carry: tuple[jax.Array, jax.Array], filtered: tuple[jax.Array, ...]
     ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, jax.Array]]:
         x_next, P_next = carry
-        x, P, x_pred, P_pred = filtered
+        x, P, x_pred, P_pred, *rest = filtered
+        F_k = rest[0] if per_step else F
         # LU rather than _solve_spd: P_pred can be near-singular when Q is.
-        G = jnp.linalg.solve(P_pred, _mm(F, P)).T
+        G = jnp.linalg.solve(P_pred, _mm(F_k, P)).T
         x_s = x + _mm(G, x_next - x_pred)
         P_s = _symmetrize(P + _mm(_mm(G, P_next - P_pred), G.T))
         return (x_s, P_s), (x_s, P_s)
@@ -152,7 +213,7 @@ def _rts_smoother(F: jax.Array, result: FilterResult[jax.Array]) -> SmootherResu
         result.covs[:-1],
         result.predicted_means[1:],
         result.predicted_covs[1:],
-    )
+    ) + ((F[1:],) if per_step else ())
     _, (means, covs) = jax.lax.scan(step, last, filtered, reverse=True)
     return SmootherResult(
         jnp.concatenate([means, last[0][None]]), jnp.concatenate([covs, last[1][None]])
@@ -177,3 +238,28 @@ def kalman_filter(
 def rts_smoother(F: ArrayLike, result: FilterResult[jax.Array]) -> SmootherResult[jax.Array]:
     """Rauch-Tung-Striebel backward pass over the output of :func:`kalman_filter`."""
     return _rts_smoother(asarray(F, result.means.dtype), result)  # type: ignore[no-any-return]
+
+
+def ekf_filter(
+    Q: ArrayLike,
+    R: ArrayLike,
+    x0: ArrayLike,
+    P0: ArrayLike,
+    zs: jax.Array,
+    dts: ArrayLike,
+    f: Callable[[jax.Array, jax.Array], jax.Array],
+    h: Callable[[jax.Array], jax.Array],
+    jac_f: Callable[[jax.Array, jax.Array], jax.Array] | None,
+    jac_h: Callable[[jax.Array], jax.Array] | None,
+    residual: Callable[[jax.Array, jax.Array], jax.Array] | None,
+) -> ExtendedFilterResult[jax.Array]:
+    """Extended Kalman filter; missing Jacobians are derived with ``jax.jacfwd``.
+
+    ``f``, ``h``, the Jacobians and ``residual`` must be written with ``jax.numpy`` so JAX can
+    trace them.
+    """
+    dtype = zs.dtype
+    Q_, R_, x0_, P0_, dts_ = (asarray(a, dtype) for a in (Q, R, x0, P0, dts))
+    return _ekf_filter(  # type: ignore[no-any-return]
+        Q_, R_, x0_, P0_, zs, dts_, f=f, h=h, jac_f=jac_f, jac_h=jac_h, residual=residual
+    )

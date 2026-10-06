@@ -29,6 +29,13 @@ class FilterResult(Generic[A]):
 
 
 @dataclass(frozen=True)
+class ExtendedFilterResult(FilterResult[A]):
+    """:class:`FilterResult` plus the linearized models the EKF used, needed for smoothing."""
+
+    transition_jacobians: A  # (T, n, n): row k is df/dx at the posterior before step k
+
+
+@dataclass(frozen=True)
 class SmootherResult(Generic[A]):
     """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``."""
 
