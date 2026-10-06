@@ -196,3 +196,31 @@ def test_supplied_jacobians_work_without_jax(monkeypatch: pytest.MonkeyPatch) ->
         jac_h=lambda x: np.eye(2),
     )
     assert ekf.smooth(ekf.filter(np.ones((5, 2)), dt=1.0)).means.shape == (5, 2)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_square_root_form_matches_joseph_form(backend: str) -> None:
+    sc = make_range_bearing()
+    expected = range_bearing_ekf(sc).filter(sc.zs, dt=1.0)
+    sqrt_ekf = range_bearing_ekf(sc, square_root=True)
+    actual = sqrt_ekf.filter(sc.zs, dt=1.0, backend=backend)  # type: ignore[call-overload]
+    np.testing.assert_allclose(np.asarray(actual.means), expected.means, rtol=1e-9, atol=1e-9)
+    np.testing.assert_allclose(np.asarray(actual.covs), expected.covs, rtol=1e-8, atol=1e-12)
+    np.testing.assert_allclose(actual.log_likelihood, expected.log_likelihood, rtol=1e-10)
+    np.testing.assert_allclose(
+        np.asarray(sqrt_ekf.smooth(actual).means),
+        range_bearing_ekf(sc).smooth(expected).means,
+        rtol=1e-9,
+        atol=1e-9,
+    )
+
+
+def test_square_root_step_by_step_matches_batch() -> None:
+    sc = make_range_bearing(steps=40)
+    ekf = range_bearing_ekf(sc, square_root=True)
+    res = ekf.filter(sc.zs, dt=1.0)
+    for k, z in enumerate(sc.zs):
+        ekf.predict(dt=1.0)
+        ekf.update(z)
+        np.testing.assert_allclose(res.means[k], ekf.x, rtol=1e-12)
+        np.testing.assert_allclose(res.covs[k], ekf.P, rtol=1e-12, atol=1e-15)

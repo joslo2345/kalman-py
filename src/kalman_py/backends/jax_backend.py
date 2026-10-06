@@ -28,6 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
+from kalman_py.backends.numpy_backend import psd_factor
 from kalman_py.result import ExtendedFilterResult, FilterResult, SmootherResult
 
 _LOG_2PI = math.log(2 * math.pi)
@@ -93,16 +94,6 @@ def _symmetrize(P: jax.Array) -> jax.Array:
     return 0.5 * (P + P.T)
 
 
-def _predict(x: jax.Array, P: jax.Array, F: jax.Array, Q: jax.Array) -> tuple[jax.Array, jax.Array]:
-    return _mm(F, x), _symmetrize(_mm(_mm(F, P), F.T) + Q)
-
-
-def _update(
-    x: jax.Array, P: jax.Array, z: jax.Array, H: jax.Array, R: jax.Array
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    return _correct(x, P, z - _mm(H, x), H, R)
-
-
 def _correct(
     x: jax.Array, P: jax.Array, y: jax.Array, H: jax.Array, R: jax.Array
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
@@ -120,6 +111,45 @@ def _correct(
     return x + _mm(K, y), P_post, nis, log_likelihood
 
 
+def _sqrt_predict_cov(S: jax.Array, F: jax.Array, L_Q: jax.Array) -> jax.Array:
+    # Mirrors numpy_backend.sqrt_predict; see the comments there.
+    r = jnp.linalg.qr(jnp.vstack((_mm(F, S).T, L_Q.T)), mode="r")
+    return r.T
+
+
+def _sqrt_correct(
+    x: jax.Array, S: jax.Array, y: jax.Array, H: jax.Array, L_R: jax.Array
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    # Mirrors numpy_backend._sqrt_correct; see the comments there.
+    m, n = L_R.shape[0], S.shape[0]
+    pre = jnp.block([[L_R, _mm(H, S)], [jnp.zeros((n, m), dtype=S.dtype), S]])
+    post = jnp.linalg.qr(pre.T, mode="r").T
+    L_y, Kb, S_post = post[:m, :m], post[m:, :m], post[m:, m:]
+
+    w = jax.scipy.linalg.solve_triangular(L_y, y, lower=True)
+    nis = (w * w).sum()
+    logdet = 2 * jnp.log(jnp.abs(jnp.diagonal(L_y))).sum()
+    log_likelihood = -0.5 * (nis + logdet + m * _LOG_2PI)
+    return x + _mm(Kb, w), S_post, nis, log_likelihood
+
+
+def _predict_cov(C: jax.Array, F: jax.Array, Qc: jax.Array, square_root: bool) -> jax.Array:
+    """Predicted covariance, or its factor in square-root form (then ``Qc`` factors Q)."""
+    if square_root:
+        return _sqrt_predict_cov(C, F, Qc)
+    return _symmetrize(_mm(_mm(F, C), F.T) + Qc)
+
+
+def _correct_any(
+    x: jax.Array, C: jax.Array, y: jax.Array, H: jax.Array, Rc: jax.Array, square_root: bool
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    return (_sqrt_correct if square_root else _correct)(x, C, y, H, Rc)
+
+
+def _cov(C: jax.Array, square_root: bool) -> jax.Array:
+    return _mm(C, C.T) if square_root else C
+
+
 def jacobian(fn: Callable[..., Any]) -> Callable[..., jax.Array]:
     """Jitted forward-mode Jacobian of ``fn`` with respect to its first argument."""
     return jax.jit(jax.jacfwd(fn))
@@ -129,33 +159,37 @@ def _subtract(a: jax.Array, b: jax.Array) -> jax.Array:
     return a - b
 
 
-@jax.jit
+@partial(jax.jit, static_argnames=("square_root",))
 def _kalman_filter(
     F: jax.Array,
     H: jax.Array,
-    Q: jax.Array,
-    R: jax.Array,
+    Qc: jax.Array,
+    Rc: jax.Array,
     x0: jax.Array,
-    P0: jax.Array,
+    C0: jax.Array,
     zs: jax.Array,
+    square_root: bool,
 ) -> FilterResult[jax.Array]:
+    # Qc, Rc, C0 are Q, R, P0, or their factors in square-root form.
     def step(
         carry: tuple[jax.Array, jax.Array], z: jax.Array
     ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, ...]]:
-        x_pred, P_pred = _predict(*carry, F, Q)
-        x, P, nis, ll = _update(x_pred, P_pred, z, H, R)
-        return (x, P), (x, P, x_pred, P_pred, nis, ll)
+        x, C = carry
+        x_pred, C_pred = _mm(F, x), _predict_cov(C, F, Qc, square_root)
+        x, C, nis, ll = _correct_any(x_pred, C_pred, z - _mm(H, x_pred), H, Rc, square_root)
+        cov, pred_cov = _cov(C, square_root), _cov(C_pred, square_root)
+        return (x, C), (x, cov, x_pred, pred_cov, nis, ll)
 
-    _, (means, covs, pred_means, pred_covs, nis, lls) = jax.lax.scan(step, (x0, P0), zs)
+    _, (means, covs, pred_means, pred_covs, nis, lls) = jax.lax.scan(step, (x0, C0), zs)
     return FilterResult(means, covs, pred_means, pred_covs, nis, lls.sum())
 
 
-@partial(jax.jit, static_argnames=("f", "h", "jac_f", "jac_h", "residual"))
+@partial(jax.jit, static_argnames=("f", "h", "jac_f", "jac_h", "residual", "square_root"))
 def _ekf_filter(
-    Q: jax.Array,
-    R: jax.Array,
+    Qc: jax.Array,
+    Rc: jax.Array,
     x0: jax.Array,
-    P0: jax.Array,
+    C0: jax.Array,
     zs: jax.Array,
     dts: jax.Array,
     *,
@@ -164,6 +198,7 @@ def _ekf_filter(
     jac_f: Callable[[jax.Array, jax.Array], jax.Array] | None,
     jac_h: Callable[[jax.Array], jax.Array] | None,
     residual: Callable[[jax.Array, jax.Array], jax.Array] | None,
+    square_root: bool,
 ) -> ExtendedFilterResult[jax.Array]:
     # The model functions are static: jit caches compiled code per function object, so passing
     # the same module-level functions to many filters compiles once.
@@ -174,18 +209,19 @@ def _ekf_filter(
     def step(
         carry: tuple[jax.Array, jax.Array], inputs: tuple[jax.Array, jax.Array]
     ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, ...]]:
-        x, P = carry
+        x, C = carry
         z, dt = inputs
-        F = jnp.asarray(jac_f_(x, dt), dtype=P.dtype)
-        x_pred = jnp.asarray(f(x, dt), dtype=P.dtype)
-        P_pred = _symmetrize(_mm(_mm(F, P), F.T) + Q)
-        H = jnp.asarray(jac_h_(x_pred), dtype=P.dtype)
-        y = jnp.asarray(residual_(z, jnp.asarray(h(x_pred), dtype=P.dtype)), dtype=P.dtype)
-        x, P, nis, ll = _correct(x_pred, P_pred, y, H, R)
-        return (x, P), (x, P, x_pred, P_pred, nis, ll, F)
+        F = jnp.asarray(jac_f_(x, dt), dtype=C.dtype)
+        x_pred = jnp.asarray(f(x, dt), dtype=C.dtype)
+        C_pred = _predict_cov(C, F, Qc, square_root)
+        H = jnp.asarray(jac_h_(x_pred), dtype=C.dtype)
+        y = jnp.asarray(residual_(z, jnp.asarray(h(x_pred), dtype=C.dtype)), dtype=C.dtype)
+        x, C, nis, ll = _correct_any(x_pred, C_pred, y, H, Rc, square_root)
+        cov, pred_cov = _cov(C, square_root), _cov(C_pred, square_root)
+        return (x, C), (x, cov, x_pred, pred_cov, nis, ll, F)
 
     _, (means, covs, pred_means, pred_covs, nis, lls, jacobians) = jax.lax.scan(
-        step, (x0, P0), (zs, dts)
+        step, (x0, C0), (zs, dts)
     )
     return ExtendedFilterResult(means, covs, pred_means, pred_covs, nis, lls.sum(), jacobians)
 
@@ -228,11 +264,26 @@ def kalman_filter(
     x0: ArrayLike,
     P0: ArrayLike,
     zs: jax.Array,
+    square_root: bool = False,
 ) -> FilterResult[jax.Array]:
     """Run predict + update for every row of ``zs``, starting from the prior ``(x0, P0)``."""
     dtype = zs.dtype
+    Q, R, P0 = _covariance_inputs(Q, R, P0, dtype, square_root)
     F_, H_, Q_, R_, x0_, P0_ = (asarray(a, dtype) for a in (F, H, Q, R, x0, P0))
-    return _kalman_filter(F_, H_, Q_, R_, x0_, P0_, zs)  # type: ignore[no-any-return]
+    return _kalman_filter(  # type: ignore[no-any-return]
+        F_, H_, Q_, R_, x0_, P0_, zs, square_root=square_root
+    )
+
+
+def _covariance_inputs(
+    Q: ArrayLike, R: ArrayLike, P0: ArrayLike, dtype: np.dtype[Any], square_root: bool
+) -> tuple[ArrayLike, ArrayLike, ArrayLike]:
+    """In square-root form, replace Q, R and P0 by factors (computed once, outside jit)."""
+    if not square_root:
+        return Q, R, P0
+    return tuple(  # type: ignore[return-value]
+        psd_factor(np.asarray(a, dtype=dtype), name) for a, name in ((Q, "Q"), (R, "R"), (P0, "P0"))
+    )
 
 
 def rts_smoother(F: ArrayLike, result: FilterResult[jax.Array]) -> SmootherResult[jax.Array]:
@@ -252,6 +303,7 @@ def ekf_filter(
     jac_f: Callable[[jax.Array, jax.Array], jax.Array] | None,
     jac_h: Callable[[jax.Array], jax.Array] | None,
     residual: Callable[[jax.Array, jax.Array], jax.Array] | None,
+    square_root: bool = False,
 ) -> ExtendedFilterResult[jax.Array]:
     """Extended Kalman filter; missing Jacobians are derived with ``jax.jacfwd``.
 
@@ -259,7 +311,19 @@ def ekf_filter(
     trace them.
     """
     dtype = zs.dtype
+    Q, R, P0 = _covariance_inputs(Q, R, P0, dtype, square_root)
     Q_, R_, x0_, P0_, dts_ = (asarray(a, dtype) for a in (Q, R, x0, P0, dts))
     return _ekf_filter(  # type: ignore[no-any-return]
-        Q_, R_, x0_, P0_, zs, dts_, f=f, h=h, jac_f=jac_f, jac_h=jac_h, residual=residual
+        Q_,
+        R_,
+        x0_,
+        P0_,
+        zs,
+        dts_,
+        f=f,
+        h=h,
+        jac_f=jac_f,
+        jac_h=jac_h,
+        residual=residual,
+        square_root=square_root,
     )

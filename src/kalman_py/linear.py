@@ -32,6 +32,11 @@ class KalmanFilter:
 
     Use :meth:`predict` and :meth:`update` in real-time loops, or :meth:`filter` to process a
     whole measurement sequence at once, then :meth:`smooth` to refine it with future data.
+
+    ``square_root=True`` propagates a factor ``S`` of the covariance (``P = S S'``) with QR
+    decompositions instead of using the Joseph form. The covariance then stays positive
+    semi-definite even for extremely precise sensors, at the cost of a QR per step. In this
+    mode ``P`` is derived from the factor after every step, so assigning to it has no effect.
     """
 
     def __init__(
@@ -42,6 +47,8 @@ class KalmanFilter:
         R: ArrayLike,
         x0: ArrayLike,
         P0: ArrayLike,
+        *,
+        square_root: bool = False,
     ) -> None:
         self.F, self.H, self.Q, self.R, self.x0, self.P0 = as_float_arrays(F, H, Q, R, x0, P0)
         if self.H.ndim != 2:
@@ -52,6 +59,11 @@ class KalmanFilter:
         check_shape("R", self.R, (m, m))
         check_shape("x0", self.x0, (n,))
         check_shape("P0", self.P0, (n, n))
+        self.square_root = square_root
+        if square_root:
+            self._L_Q = numpy_backend.psd_factor(self.Q, "Q")
+            self._L_R = numpy_backend.psd_factor(self.R, "R")
+            self._S = numpy_backend.psd_factor(self.P0, "P0")
         self.x = self.x0.copy()
         self.P = self.P0.copy()
 
@@ -65,13 +77,23 @@ class KalmanFilter:
 
     def predict(self) -> None:
         """Advance the current estimate ``(x, P)`` by one time step."""
-        self.x, self.P = numpy_backend.predict(self.x, self.P, self.F, self.Q)
+        if self.square_root:
+            self.x, self._S = numpy_backend.sqrt_predict(self.x, self._S, self.F, self._L_Q)
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P = numpy_backend.predict(self.x, self.P, self.F, self.Q)
 
     def update(self, z: ArrayLike) -> None:
         """Condition the current estimate on one measurement."""
         z_arr = np.asarray(z, dtype=self.P.dtype).reshape(-1)
         check_shape("z", z_arr, (self.dim_z,))
-        self.x, self.P, _, _ = numpy_backend.update(self.x, self.P, z_arr, self.H, self.R)
+        if self.square_root:
+            self.x, self._S, _, _ = numpy_backend.sqrt_update(
+                self.x, self._S, z_arr, self.H, self._L_R
+            )
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P, _, _ = numpy_backend.update(self.x, self.P, z_arr, self.H, self.R)
 
     @overload
     def filter(self, zs: ArrayLike, backend: Literal["numpy"] = ...) -> FilterResult[Array]: ...
@@ -92,13 +114,13 @@ class KalmanFilter:
         if backend == "numpy":
             zs_np = check_measurements(np.asarray(zs, dtype=self.P0.dtype), self.dim_z)
             return numpy_backend.kalman_filter(
-                self.F, self.H, self.Q, self.R, self.x0, self.P0, zs_np
+                self.F, self.H, self.Q, self.R, self.x0, self.P0, zs_np, self.square_root
             )
         if backend == "jax":
             jb = jax_backend()
             zs_jax = check_measurements(jb.asarray(zs, self.P0.dtype), self.dim_z)
             result: FilterResult[jax.Array] = jb.kalman_filter(
-                self.F, self.H, self.Q, self.R, self.x0, self.P0, zs_jax
+                self.F, self.H, self.Q, self.R, self.x0, self.P0, zs_jax, self.square_root
             )
             return result
         raise ValueError(f"unknown backend {backend!r}; expected 'numpy' or 'jax'")

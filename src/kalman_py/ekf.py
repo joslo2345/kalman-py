@@ -41,6 +41,9 @@ class ExtendedKalmanFilter:
 
     For the JAX backend, pass module-level functions rather than fresh lambdas: compiled code is
     cached per function object.
+
+    ``square_root=True`` selects the square-root covariance form; see
+    :class:`~kalman_py.KalmanFilter`.
     """
 
     def __init__(
@@ -55,6 +58,7 @@ class ExtendedKalmanFilter:
         jac_f: TransitionFn | None = None,
         jac_h: MeasurementFn | None = None,
         residual_z: ResidualFn | None = None,
+        square_root: bool = False,
     ) -> None:
         self.Q, self.R, self.x0, self.P0 = as_float_arrays(Q, R, x0, P0)
         if self.x0.ndim != 1:
@@ -80,6 +84,12 @@ class ExtendedKalmanFilter:
         self._np_jac_h: MeasurementFn = jac_h if jac_h is not None else jb.jacobian(h)
         self._np_residual: ResidualFn = residual_z if residual_z is not None else np.subtract
 
+        self.square_root = square_root
+        if square_root:
+            self._L_Q = numpy_backend.psd_factor(self.Q, "Q")
+            self._L_R = numpy_backend.psd_factor(self.R, "R")
+            self._S = numpy_backend.psd_factor(self.P0, "P0")
+
         self.x = self.x0.copy()
         self.P = self.P0.copy()
 
@@ -93,17 +103,36 @@ class ExtendedKalmanFilter:
 
     def predict(self, dt: float) -> None:
         """Advance the current estimate ``(x, P)`` by ``dt``."""
-        self.x, self.P, _ = numpy_backend.ekf_predict(
-            self.x, self.P, self.Q, dt, self.f, self._np_jac_f
-        )
+        if self.square_root:
+            self.x, self._S, _ = numpy_backend.ekf_predict(
+                self.x, self._S, self._L_Q, dt, self.f, self._np_jac_f, square_root=True
+            )
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P, _ = numpy_backend.ekf_predict(
+                self.x, self.P, self.Q, dt, self.f, self._np_jac_f
+            )
 
     def update(self, z: ArrayLike) -> None:
         """Condition the current estimate on one measurement."""
         z_arr = np.asarray(z, dtype=self.P.dtype).reshape(-1)
         check_shape("z", z_arr, (self.dim_z,))
-        self.x, self.P, _, _ = numpy_backend.ekf_update(
-            self.x, self.P, z_arr, self.R, self.h, self._np_jac_h, self._np_residual
-        )
+        if self.square_root:
+            self.x, self._S, _, _ = numpy_backend.ekf_update(
+                self.x,
+                self._S,
+                z_arr,
+                self._L_R,
+                self.h,
+                self._np_jac_h,
+                self._np_residual,
+                square_root=True,
+            )
+            self.P = self._S @ self._S.T
+        else:
+            self.x, self.P, _, _ = numpy_backend.ekf_update(
+                self.x, self.P, z_arr, self.R, self.h, self._np_jac_h, self._np_residual
+            )
 
     def _time_steps(self, dt: ArrayLike, T: int) -> Array:
         dts = np.asarray(dt, dtype=self.P0.dtype)
@@ -144,6 +173,7 @@ class ExtendedKalmanFilter:
                 self._np_jac_f,
                 self._np_jac_h,
                 self._np_residual,
+                self.square_root,
             )
         if backend == "jax":
             jb = jax_backend()
@@ -160,6 +190,7 @@ class ExtendedKalmanFilter:
                 self.jac_f,
                 self.jac_h,
                 self.residual_z,
+                self.square_root,
             )
             return result
         raise ValueError(f"unknown backend {backend!r}; expected 'numpy' or 'jax'")
