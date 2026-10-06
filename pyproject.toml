@@ -1,6 +1,6 @@
 [project]
 name = "kalman-py"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fast, exact and numerically robust Kalman filters for Python: KF, EKF, UKF, RTS smoothers, noise learning and diagnostics on NumPy or JAX"
 readme = "README.md"
 license = "MIT"
