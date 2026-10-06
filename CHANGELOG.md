@@ -7,6 +7,15 @@ include breaking changes.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-06
+
+No changes to the library.
+
+### Changed
+
+- The README, shown on the PyPI project page, now gives the PyPI install command
+  (`pip install kalman-py`) and a version badge instead of saying the package isn't on PyPI.
+
 ## [0.1.0] - 2026-10-06
 
 First release.
@@ -35,5 +44,6 @@ First release.
 - Benchmarks against FilterPy and pykalman on five frozen shared scenarios (S1–S5), a
   documentation site with three tutorial notebooks, and a migration guide from FilterPy.
 
-[Unreleased]: https://github.com/joslo2345/kalman-py/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/joslo2345/kalman-py/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/joslo2345/kalman-py/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/joslo2345/kalman-py/releases/tag/v0.1.0
