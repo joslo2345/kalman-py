@@ -54,12 +54,12 @@ def simulate(
     rng = np.random.default_rng(seed)
     n, m = F.shape[0], H.shape[0]
     x = rng.multivariate_normal(x0, P0)
+    process_noise = rng.multivariate_normal(np.zeros(n), Q, size=steps)
     truth = np.empty((steps, n))
-    zs = np.empty((steps, m))
     for k in range(steps):
-        x = F @ x + rng.multivariate_normal(np.zeros(n), Q)
+        x = F @ x + process_noise[k]
         truth[k] = x
-        zs[k] = H @ x + rng.multivariate_normal(np.zeros(m), R)
+    zs = truth @ H.T + rng.multivariate_normal(np.zeros(m), R, size=steps)
     return LinearScenario(F, H, Q, R, x0, P0, zs, truth)
 
 

@@ -1,31 +1,36 @@
-"""Result containers returned by batch filtering."""
+"""Result containers returned by batch filtering and smoothing.
+
+They are generic over the array type: the NumPy backend fills them with NumPy arrays, the JAX
+backend with JAX arrays (left on the device, so computation can stay asynchronous).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Generic, TypeVar
 
-from kalman_py._typing import Array
+A = TypeVar("A")
 
 
 @dataclass(frozen=True)
-class FilterResult:
+class FilterResult(Generic[A]):
     """Output of a batch filter run over ``T`` measurements.
 
     Row ``k`` of ``means``/``covs`` is the posterior after measurement ``k``; row ``k`` of
     ``predicted_means``/``predicted_covs`` is the prior just before it (needed by smoothers).
     """
 
-    means: Array  # (T, n)
-    covs: Array  # (T, n, n)
-    predicted_means: Array  # (T, n)
-    predicted_covs: Array  # (T, n, n)
-    nis: Array  # (T,) normalized innovation squared
-    log_likelihood: float  # log p(z_1, ..., z_T)
+    means: A  # (T, n)
+    covs: A  # (T, n, n)
+    predicted_means: A  # (T, n)
+    predicted_covs: A  # (T, n, n)
+    nis: A  # (T,) normalized innovation squared
+    log_likelihood: A  # 0-d array: log p(z_1, ..., z_T)
 
 
 @dataclass(frozen=True)
-class SmootherResult:
+class SmootherResult(Generic[A]):
     """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``."""
 
-    means: Array  # (T, n)
-    covs: Array  # (T, n, n)
+    means: A  # (T, n)
+    covs: A  # (T, n, n)

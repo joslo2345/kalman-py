@@ -4,15 +4,21 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from kalman_py import KalmanFilter
+from kalman_py.linear import Backend
 from tests.scenarios import make_random_linear
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
 @given(seed=st.integers(0, 2**32 - 1), log_r=st.floats(-12, 2))
 @settings(max_examples=200, deadline=None)
-def test_covariance_stays_symmetric_positive_semidefinite(seed: int, log_r: float) -> None:
+def test_covariance_stays_symmetric_positive_semidefinite(
+    backend: Backend, seed: int, log_r: float
+) -> None:
+    if backend == "jax":
+        pytest.importorskip("jax")
     sc = make_random_linear(seed=seed, r_scale=10.0**log_r, steps=2000)
-    P = KalmanFilter(**sc.params).filter(sc.zs).covs
+    P = np.asarray(KalmanFilter(**sc.params).filter(sc.zs, backend=backend).covs)
 
     np.testing.assert_array_equal(P, np.swapaxes(P, -1, -2))
     # Tiny R drives cond(P) to ~1/eps, where eigvalsh can't resolve the smallest eigenvalue's

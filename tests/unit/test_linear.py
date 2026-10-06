@@ -103,4 +103,4 @@ def test_rejects_wrong_measurement_shape(cv_scenario: LinearScenario) -> None:
 
 def test_unknown_backend_raises(cv_scenario: LinearScenario) -> None:
     with pytest.raises(ValueError, match="unknown backend"):
-        KalmanFilter(**cv_scenario.params).filter(cv_scenario.zs, backend="torch")  # type: ignore[arg-type]
+        KalmanFilter(**cv_scenario.params).filter(cv_scenario.zs, backend="torch")  # type: ignore[call-overload]

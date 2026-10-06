@@ -54,7 +54,7 @@ def update(x: Array, P: Array, z: Array, H: Array, R: Array) -> UpdateResult:
 
 def kalman_filter(
     F: Array, H: Array, Q: Array, R: Array, x0: Array, P0: Array, zs: Array
-) -> FilterResult:
+) -> FilterResult[Array]:
     """Run predict + update for every row of ``zs``, starting from the prior ``(x0, P0)``."""
     T, n = zs.shape[0], x0.shape[0]
     dtype = P0.dtype
@@ -62,7 +62,7 @@ def kalman_filter(
     covs = np.empty((T, n, n), dtype=dtype)
     predicted_means = np.empty((T, n), dtype=dtype)
     predicted_covs = np.empty((T, n, n), dtype=dtype)
-    nis = np.empty(T)
+    nis = np.empty(T, dtype=dtype)
     log_likelihood = 0.0
 
     x, P = x0, P0
@@ -73,10 +73,12 @@ def kalman_filter(
         means[k], covs[k] = x, P
         log_likelihood += ll
 
-    return FilterResult(means, covs, predicted_means, predicted_covs, nis, log_likelihood)
+    return FilterResult(
+        means, covs, predicted_means, predicted_covs, nis, np.asarray(log_likelihood, dtype=dtype)
+    )
 
 
-def rts_smoother(F: Array, result: FilterResult) -> SmootherResult:
+def rts_smoother(F: Array, result: FilterResult[Array]) -> SmootherResult[Array]:
     """Rauch-Tung-Striebel backward pass over the output of :func:`kalman_filter`."""
     means = result.means.copy()
     covs = result.covs.copy()

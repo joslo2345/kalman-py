@@ -16,3 +16,8 @@ else:
 @pytest.fixture(scope="session")
 def cv_scenario() -> LinearScenario:
     return make_cv_2d(seed=0, steps=200)
+
+
+@pytest.fixture(scope="session")
+def long_scenario() -> LinearScenario:
+    return make_cv_2d(seed=1, steps=100_000)
