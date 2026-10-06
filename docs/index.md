@@ -32,12 +32,13 @@ and on an optional JAX backend that compiles the whole time loop.
 
 ## Install
 
-kalman-py isn't on PyPI yet. From a clone of the repository:
-
 ```bash
-pip install -e .              # NumPy only
-pip install -e ".[jax,plot]"  # with the JAX backend and plotting helpers
+pip install kalman-py                 # NumPy only
+pip install "kalman-py[jax,plot]"     # with the JAX backend and plotting helpers
 ```
+
+For the development version, install from a clone of the
+[repository](https://github.com/joslo2345/kalman-py) with `pip install -e ".[jax,plot]"`.
 
 ## Where to go next
 
