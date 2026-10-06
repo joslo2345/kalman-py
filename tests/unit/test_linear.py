@@ -136,3 +136,39 @@ def test_steady_state_shortcut_not_taken_without_exact_repeat() -> None:
     full = _joseph_kalman_filter(*args, detect_steady_state=False)
     np.testing.assert_array_equal(fast.covs, full.covs)
     assert fast.covs[-1, 0, 0] > fast.covs[-2, 0, 0]
+
+
+@pytest.mark.parametrize("square_root", [False, True])
+def test_per_call_model_overrides(cv_scenario: LinearScenario, square_root: bool) -> None:
+    sc = cv_scenario
+    # Overriding with the model's own matrices changes nothing.
+    a = KalmanFilter(**sc.params, square_root=square_root)
+    b = KalmanFilter(**sc.params, square_root=square_root)
+    for z in sc.zs[:20]:
+        a.predict()
+        a.update(z)
+        b.predict(F=sc.F, Q=sc.Q)
+        b.update(z, H=sc.H, R=sc.R)
+    np.testing.assert_allclose(b.x, a.x, rtol=1e-12)
+    np.testing.assert_allclose(b.P, a.P, rtol=1e-12)
+
+    # A different sensor: velocity only (1 row), against a filter built for that sensor.
+    H_v, R_v = np.array([[0.0, 0.0, 1.0, 0.0]]), np.array([[0.04]])
+    fused = KalmanFilter(**sc.params, square_root=square_root)
+    velocity_only = KalmanFilter(sc.F, H_v, sc.Q, R_v, sc.x0, sc.P0, square_root=square_root)
+    for flt in (fused, velocity_only):
+        flt.predict()
+    fused.update([0.9], H=H_v, R=R_v)
+    velocity_only.update([0.9])
+    np.testing.assert_allclose(fused.x, velocity_only.x, rtol=1e-12)
+    np.testing.assert_allclose(fused.P, velocity_only.P, rtol=1e-12, atol=1e-15)
+
+
+def test_override_shape_errors(cv_scenario: LinearScenario) -> None:
+    kf = KalmanFilter(**cv_scenario.params)
+    with pytest.raises(ValueError, match="needs its own R"):
+        kf.update([1.0], H=[[1.0, 0, 0, 0]])
+    with pytest.raises(ValueError, match="H must have shape"):
+        kf.update([1.0], H=[[1.0, 0]], R=[[1.0]])
+    with pytest.raises(ValueError, match="F must have shape"):
+        kf.predict(F=np.eye(3))

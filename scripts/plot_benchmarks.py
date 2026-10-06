@@ -209,7 +209,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=Path("docs/assets"))
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    plt.rcParams.update({"font.family": "DejaVu Sans", "svg.fonttype": "none"})
+    # Text as paths: browsers lack DejaVu Sans and would fall back to a serif font.
+    plt.rcParams.update({"font.family": "DejaVu Sans", "svg.fonttype": "path"})
     values = load(args.csv)
     for theme in THEMES:
         speed_chart(values, theme, args.out)

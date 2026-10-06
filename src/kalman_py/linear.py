@@ -30,8 +30,10 @@ class KalmanFilter:
     prediction, so every measurement is preceded by a predict step (the FilterPy
     convention).
 
-    Use :meth:`predict` and :meth:`update` in real-time loops, or :meth:`filter` to process a
-    whole measurement sequence at once, then :meth:`smooth` to refine it with future data.
+    Use [`predict`][kalman_py.KalmanFilter.predict] and
+    [`update`][kalman_py.KalmanFilter.update] in real-time loops, or
+    [`filter`][kalman_py.KalmanFilter.filter] to process a whole measurement sequence at once,
+    then [`smooth`][kalman_py.KalmanFilter.smooth] to refine it with future data.
 
     ``square_root=True`` propagates a factor ``S`` of the covariance (``P = S S'``) with QR
     decompositions instead of using the Joseph form. The covariance then stays positive
@@ -76,26 +78,58 @@ class KalmanFilter:
     def dim_z(self) -> int:
         return int(self.H.shape[0])
 
-    def predict(self) -> None:
-        """Advance the current estimate ``(x, P)`` by one time step."""
-        if self.square_root:
-            self.x, self._S = numpy_backend.sqrt_predict(self.x, self._S, self.F, self._L_Q)
-            self.P = self._S @ self._S.T
-        else:
-            self.x, self.P = numpy_backend.predict(self.x, self.P, self.F, self.Q)
+    def _override(self, name: str, value: ArrayLike, shape: tuple[int, ...]) -> Array:
+        """A per-call replacement for a model matrix, in the filter's dtype."""
+        array = np.asarray(value, dtype=self.P0.dtype)
+        check_shape(name, array, shape)
+        return array
 
-    def update(self, z: ArrayLike) -> None:
-        """Condition the current estimate on one measurement."""
-        z_arr = np.asarray(z, dtype=self.P.dtype).reshape(-1)
-        check_shape("z", z_arr, (self.dim_z,))
+    def predict(self, F: ArrayLike | None = None, Q: ArrayLike | None = None) -> None:
+        """Advance the current estimate ``(x, P)`` by one time step.
+
+        ``F`` and ``Q`` replace the model's matrices for this step only, e.g. for a varying
+        time step.
+        """
+        n = (self.dim_x, self.dim_x)
+        F_ = self.F if F is None else self._override("F", F, n)
         if self.square_root:
-            self.x, self._S, _, _ = numpy_backend.sqrt_update(
-                self.x, self._S, z_arr, self.H, self._L_R
+            L_Q = (
+                self._L_Q if Q is None else numpy_backend.psd_factor(self._override("Q", Q, n), "Q")
             )
+            self.x, self._S = numpy_backend.sqrt_predict(self.x, self._S, F_, L_Q)
             self.P = self._S @ self._S.T
         else:
+            Q_ = self.Q if Q is None else self._override("Q", Q, n)
+            self.x, self.P = numpy_backend.predict(self.x, self.P, F_, Q_)
+
+    def update(self, z: ArrayLike, H: ArrayLike | None = None, R: ArrayLike | None = None) -> None:
+        """Condition the current estimate on one measurement.
+
+        ``H`` and ``R`` replace the measurement model for this update only, e.g. to fuse sensors
+        that measure different things: ``H`` may then have any number of rows ``k``, with ``z``
+        of length ``k`` and ``R`` of shape ``(k, k)`` (``R`` is required when ``k`` differs from
+        the model's measurement dimension).
+        """
+        H_ = self.H if H is None else np.asarray(H, dtype=self.P0.dtype)
+        if H_.ndim != 2 or H_.shape[1] != self.dim_x:
+            raise ValueError(f"H must have shape (k, {self.dim_x}), got {H_.shape}")
+        k = H_.shape[0]
+        if R is None and k != self.dim_z:
+            raise ValueError(f"an H with {k} rows needs its own R of shape ({k}, {k})")
+        z_arr = np.asarray(z, dtype=self.P.dtype).reshape(-1)
+        check_shape("z", z_arr, (k,))
+        if self.square_root:
+            L_R = (
+                self._L_R
+                if R is None
+                else numpy_backend.psd_factor(self._override("R", R, (k, k)), "R")
+            )
+            self.x, self._S, _, _ = numpy_backend.sqrt_update(self.x, self._S, z_arr, H_, L_R)
+            self.P = self._S @ self._S.T
+        else:
+            R_ = self.R if R is None else self._override("R", R, (k, k))
             self.x, self.P, _, _ = numpy_backend.update(
-                self.x, self.P, z_arr, self.H, self.R, self._identity
+                self.x, self.P, z_arr, H_, R_, self._identity
             )
 
     @overload
@@ -136,7 +170,8 @@ class KalmanFilter:
     def smooth(
         self, result: FilterResult[Array] | FilterResult[jax.Array]
     ) -> SmootherResult[Array] | SmootherResult[jax.Array]:
-        """Run the RTS smoother over the output of :meth:`filter`, on the same backend."""
+        """Run the RTS smoother over the output of [`filter`][kalman_py.KalmanFilter.filter],
+        on the same backend."""
         check_filter_result(result.means.shape, self.dim_x)
         if isinstance(result.means, np.ndarray):
             return numpy_backend.rts_smoother(self.F, result)

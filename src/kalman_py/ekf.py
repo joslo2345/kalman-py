@@ -43,7 +43,7 @@ class ExtendedKalmanFilter:
     cached per function object.
 
     ``square_root=True`` selects the square-root covariance form; see
-    :class:`~kalman_py.KalmanFilter`.
+    [`KalmanFilter`][kalman_py.KalmanFilter].
     """
 
     def __init__(
@@ -211,7 +211,8 @@ class ExtendedKalmanFilter:
     def smooth(
         self, result: ExtendedFilterResult[Array] | ExtendedFilterResult[jax.Array]
     ) -> SmootherResult[Array] | SmootherResult[jax.Array]:
-        """Extended RTS smoother over the output of :meth:`filter`, on the same backend."""
+        """Extended RTS smoother over the output of
+        [`filter`][kalman_py.ExtendedKalmanFilter.filter], on the same backend."""
         check_filter_result(result.means.shape, self.dim_x)
         if isinstance(result.means, np.ndarray):
             return numpy_backend.rts_smoother(result.transition_jacobians, result)

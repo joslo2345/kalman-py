@@ -52,6 +52,10 @@ dev = [
     "scipy>=1.15.3",
 ]
 docs = [
+    "ipykernel>=7.3.0",
+    "jupytext>=1.19.6",
+    "mkdocs-jupyter>=0.26.3",
     "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.6",
+    "nbclient>=0.11.0",
 ]

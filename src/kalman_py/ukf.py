@@ -216,7 +216,8 @@ class UnscentedKalmanFilter:
     def smooth(
         self, result: UnscentedFilterResult[Array] | UnscentedFilterResult[jax.Array]
     ) -> SmootherResult[Array] | SmootherResult[jax.Array]:
-        """Unscented RTS smoother over the output of :meth:`filter`, on the same backend."""
+        """Unscented RTS smoother over the output of
+        [`filter`][kalman_py.UnscentedKalmanFilter.filter], on the same backend."""
         check_filter_result(result.means.shape, self.dim_x)
         if isinstance(result.means, np.ndarray):
             return numpy_backend.rts_smoother_from_cross(result.cross_covariances[1:], result)

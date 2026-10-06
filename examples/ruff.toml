@@ -1,0 +1,4 @@
+# Notebooks render in narrower code cells in the docs: wrap their code earlier.
+extend = "../pyproject.toml"
+line-length = 79
+src = ["../src"]

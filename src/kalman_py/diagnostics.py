@@ -99,7 +99,8 @@ def chi2_cdf(x: float, dof: float) -> float:
 
 
 def chi2_ppf(p: float, dof: float) -> float:
-    """Chi-squared quantile, by bisection on :func:`chi2_cdf` (accurate to ~1e-12 relative)."""
+    """Chi-squared quantile, by bisection on [`chi2_cdf`][kalman_py.diagnostics.chi2_cdf]
+    (accurate to ~1e-12 relative)."""
     if not 0 < p < 1:
         raise ValueError(f"p must be in (0, 1), got {p}")
     lo, hi = 0.0, dof + 10 * math.sqrt(2 * dof) + 10

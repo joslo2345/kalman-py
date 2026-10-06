@@ -86,7 +86,7 @@ def _correct(
     """Measurement update given the innovation ``y`` and (linearized) measurement matrix ``H``.
 
     Per-step cost is dominated by fixed call overhead on small matrices, so this does the
-    minimum: NIS and likelihood are left to :func:`_innovation_stats`, which batches them.
+    minimum: NIS and likelihood are left to ``_innovation_stats``, which batches them.
     """
     if identity is None:
         identity = np.eye(x.shape[0], dtype=P.dtype)
@@ -136,7 +136,7 @@ def sqrt_predict(x: Array, S: Array, F: Array, L_Q: Array) -> tuple[Array, Array
 
 
 def sqrt_update(x: Array, S: Array, z: Array, H: Array, L_R: Array) -> Correction:
-    """Square-root counterpart of :func:`update`; ``S`` and ``L_R`` factor ``P`` and ``R``."""
+    """Square-root counterpart of ``update``; ``S`` and ``L_R`` factor ``P`` and ``R``."""
     return _sqrt_correct(x, S, z - H @ x, H, L_R)
 
 
@@ -310,7 +310,7 @@ class CovarianceDowndateError(ValueError):
 
 
 def lower_factor(M: Array, name: str) -> Array:
-    """Lower-triangular factor with positive diagonal (required by :func:`chol_update`)."""
+    """Lower-triangular factor with positive diagonal (required by ``chol_update``)."""
     try:
         return np.linalg.cholesky(M)
     except np.linalg.LinAlgError:
@@ -365,7 +365,7 @@ def sqrt_ukf_predict(
     w: SigmaWeights,
     vectorized: bool = False,
 ) -> tuple[Array, Array, Array]:
-    """Square-root :func:`ukf_predict`: ``S`` and ``L_Q`` are factors of ``P`` and ``Q``."""
+    """Square-root ``ukf_predict``: ``S`` and ``L_Q`` are factors of ``P`` and ``Q``."""
     chi = _sigma_points_from_factor(x, S, w.gamma)
     chi_f = _apply(f, chi, vectorized, dt)
     x_pred = w.mean @ chi_f
@@ -383,7 +383,7 @@ def sqrt_ukf_update(
     w: SigmaWeights,
     vectorized: bool = False,
 ) -> Correction:
-    """Square-root :func:`ukf_update`. The returned ``P`` and ``S`` are factors."""
+    """Square-root ``ukf_update``. The returned ``P`` and ``S`` are factors."""
     chi = _sigma_points_from_factor(x, S, w.gamma)
     z_pred, d_z = _measurement_sigmas(chi, h, residual, w, vectorized)
     S_y = _sqrt_weighted_factor(d_z, w, L_R)
@@ -608,7 +608,7 @@ def ukf_filter(
 
 
 def rts_smoother(F: Array, result: FilterResult[Array]) -> SmootherResult[Array]:
-    """Rauch-Tung-Striebel backward pass over the output of :func:`kalman_filter`.
+    """Rauch-Tung-Striebel backward pass over the output of ``kalman_filter``.
 
     ``F`` is the transition matrix, or a ``(T, n, n)`` stack where ``F[k]`` is the (linearized)
     transition into step ``k``, as the EKF stores it.

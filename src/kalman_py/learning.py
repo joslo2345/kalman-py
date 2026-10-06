@@ -47,7 +47,7 @@ def fit_noise(
 ) -> NoiseFit:
     """Estimate ``Q`` and/or ``R`` of ``x_k = F x_{k-1} + w``, ``z_k = H x_k + v`` by maximum
     likelihood, with ``(x0, P0)`` the prior before the first prediction (as in
-    :class:`~kalman_py.KalmanFilter`).
+    [`KalmanFilter`][kalman_py.KalmanFilter]).
 
     ``method="gradient"`` maximizes the exact log-likelihood with BFGS, differentiating through
     the JAX filter (needs JAX; enable ``jax_enable_x64`` for float64 accuracy). Q and R are

@@ -491,7 +491,7 @@ def _covariance_inputs(
 
 
 def rts_smoother(F: ArrayLike, result: FilterResult[jax.Array]) -> SmootherResult[jax.Array]:
-    """Rauch-Tung-Striebel backward pass over the output of :func:`kalman_filter`.
+    """Rauch-Tung-Striebel backward pass over the output of ``kalman_filter``.
 
     ``F`` is the transition matrix or a ``(T, n, n)`` stack of per-step Jacobians (EKF).
     """

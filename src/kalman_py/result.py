@@ -30,14 +30,16 @@ class FilterResult(Generic[A]):
 
 @dataclass(frozen=True)
 class ExtendedFilterResult(FilterResult[A]):
-    """:class:`FilterResult` plus the linearized models the EKF used, needed for smoothing."""
+    """[`FilterResult`][kalman_py.FilterResult] plus the linearized models the EKF used,
+    needed for smoothing."""
 
     transition_jacobians: A  # (T, n, n): row k is df/dx at the posterior before step k
 
 
 @dataclass(frozen=True)
 class UnscentedFilterResult(FilterResult[A]):
-    """:class:`FilterResult` plus the sigma-point cross-covariances the smoother needs."""
+    """[`FilterResult`][kalman_py.FilterResult] plus the sigma-point cross-covariances the
+    smoother needs."""
 
     cross_covariances: A  # (T, n, n): row k is Cov(x_k^-, x_{k-1} | z_1..z_{k-1})
 

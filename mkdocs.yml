@@ -1,0 +1,92 @@
+site_name: kalman-py
+site_description: Fast, exact and numerically robust Kalman filters for Python
+copyright: Released under the MIT License
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+
+hooks:
+  - scripts/mkdocs_hooks.py
+
+plugins:
+  - search
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]  # not jupytext .py files
+      execute: false  # notebooks are stored executed; CI re-executes them separately
+      include_source: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_heading: true
+            show_source: false
+            members_order: source
+            filters: ["!^_"]
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+            docstring_section_style: list
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Guides:
+      - "Backends: NumPy and JAX": guide/backends.md
+      - Nonlinear filters: guide/nonlinear.md
+      - Numerical robustness: guide/robustness.md
+  - Tutorials:
+      - Tracking a moving target: tutorials/01_tracking.ipynb
+      - Fusing two sensors: tutorials/02_sensor_fusion.ipynb
+      - Learning the noise: tutorials/03_noise_learning.ipynb
+  - Migrating from FilterPy: migration.md
+  - Benchmarks: benchmarks.md
+  - API reference:
+      - Filters: api/filters.md
+      - Results: api/results.md
+      - Learning: api/learning.md
+      - Diagnostics: api/diagnostics.md
+      - Plotting: api/plotting.md

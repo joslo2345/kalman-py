@@ -18,3 +18,7 @@ coverage.xml
 .coverage
 ci-results/
 baseline/
+
+# Documentation build
+site/
+.cache/
