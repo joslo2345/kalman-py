@@ -44,7 +44,12 @@ class UnscentedFilterResult(FilterResult[A]):
 
 @dataclass(frozen=True)
 class SmootherResult(Generic[A]):
-    """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``."""
+    """Smoothed estimates ``p(x_k | z_1, ..., z_T)`` for every step ``k``.
+
+    ``gains[k]`` is the smoother gain ``G_k`` linking steps ``k`` and ``k + 1``; the lag-one
+    covariance is ``Cov(x_{k+1}, x_k | z_1..z_T) = covs[k + 1] @ gains[k].T``.
+    """
 
     means: A  # (T, n)
     covs: A  # (T, n, n)
+    gains: A  # (T - 1, n, n)

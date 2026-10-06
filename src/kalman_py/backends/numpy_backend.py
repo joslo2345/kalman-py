@@ -625,10 +625,12 @@ def rts_smoother_from_cross(cross: Array, result: FilterResult[Array]) -> Smooth
     """
     means = result.means.copy()
     covs = result.covs.copy()
-    for k in range(means.shape[0] - 2, -1, -1):
+    T, n = means.shape
+    gains = np.empty((max(T - 1, 0), n, n), dtype=means.dtype)
+    for k in range(T - 2, -1, -1):
         P_pred = result.predicted_covs[k + 1]
         # G = Cov(x_k, x_{k+1}^-) P_pred^-1 = (P_pred^-1 cross_k)' since P_pred is symmetric.
-        G = np.linalg.solve(P_pred, cross[k]).T
+        G = gains[k] = np.linalg.solve(P_pred, cross[k]).T
         means[k] = result.means[k] + G @ (means[k + 1] - result.predicted_means[k + 1])
         covs[k] = _symmetrize(result.covs[k] + G @ (covs[k + 1] - P_pred) @ G.T)
-    return SmootherResult(means, covs)
+    return SmootherResult(means, covs, gains)

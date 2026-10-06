@@ -437,14 +437,14 @@ def _rts_smoother(cross: jax.Array, result: FilterResult[jax.Array]) -> Smoother
     # Mirrors numpy_backend.rts_smoother_from_cross.
     def step(
         carry: tuple[jax.Array, jax.Array], filtered: tuple[jax.Array, ...]
-    ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, jax.Array]]:
+    ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, jax.Array, jax.Array]]:
         x_next, P_next = carry
         x, P, x_pred, P_pred, cross_k = filtered
         # LU rather than _solve_spd: P_pred can be near-singular when Q is.
         G = jnp.linalg.solve(P_pred, cross_k).T
         x_s = x + _mm(G, x_next - x_pred)
         P_s = _symmetrize(P + _mm(_mm(G, P_next - P_pred), G.T))
-        return (x_s, P_s), (x_s, P_s)
+        return (x_s, P_s), (x_s, P_s, G)
 
     last = (result.means[-1], result.covs[-1])
     filtered = (
@@ -454,9 +454,9 @@ def _rts_smoother(cross: jax.Array, result: FilterResult[jax.Array]) -> Smoother
         result.predicted_covs[1:],
         cross,
     )
-    _, (means, covs) = jax.lax.scan(step, last, filtered, reverse=True)
+    _, (means, covs, gains) = jax.lax.scan(step, last, filtered, reverse=True)
     return SmootherResult(
-        jnp.concatenate([means, last[0][None]]), jnp.concatenate([covs, last[1][None]])
+        jnp.concatenate([means, last[0][None]]), jnp.concatenate([covs, last[1][None]]), gains
     )
 
 
