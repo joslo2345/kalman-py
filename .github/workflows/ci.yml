@@ -21,8 +21,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -49,8 +49,8 @@ jobs:
           - { os: windows-latest, python: "3.10", jax: false }
           - { os: windows-latest, python: "3.14", jax: false }
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
@@ -68,7 +68,7 @@ jobs:
         run: uv run --no-sync pytest --cov=kalman_py --cov-report=term-missing --cov-report=xml
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.xml
@@ -77,8 +77,8 @@ jobs:
     # The oldest dependency versions pyproject.toml allows, on the oldest Python.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.10"
       - name: Install the declared minimum versions
@@ -94,8 +94,8 @@ jobs:
     # and builds the site in strict mode: broken links or API cross-references fail the build.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -104,7 +104,7 @@ jobs:
         run: uv run --no-sync pytest -m "" tests/test_docs.py tests/test_readme.py
       - name: Build the site
         run: uv run --no-sync mkdocs build --strict
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: site
           path: site/
@@ -114,8 +114,8 @@ jobs:
     # numbers against FilterPy and pykalman, published as the job summary and an artifact.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
           enable-cache: true
@@ -130,7 +130,7 @@ jobs:
           uv run --no-sync python benchmarks/run.py "$ENV" --repeats 10 --out ci-results/results.csv
           uv run --no-sync python benchmarks/accuracy.py "$ENV" --out ci-results/results.csv
       - name: Restore baseline from the latest main run
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: baseline/results.csv
           key: bench-baseline-${{ github.sha }}
@@ -158,7 +158,7 @@ jobs:
             fi
           } | tee comparison.md
           cat comparison.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: comparison
           path: |
@@ -168,7 +168,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: mkdir -p baseline && cp ci-results/results.csv baseline/results.csv
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: baseline/results.csv
           key: bench-baseline-${{ github.sha }}
