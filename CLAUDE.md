@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-The project is scaffolded (guide Steps 1–3 plus the test layout) directly in this directory, but the modules under `src/kalman_py/` are empty stubs. `kalman-python-repo-guide.md` is the build plan for `kalman-py`: a fast, typed Python Kalman filter library meant to fill gaps left by FilterPy and pykalman (JAX backend, automatic EKF Jacobians, Q/R learning, NIS/NEES diagnostics). Treat that guide as the spec and read the relevant section before implementing anything. Ruff excludes the guide because newer ruff formats code blocks inside Markdown.
+The project is scaffolded directly in this directory. Step 5.1 (the linear KF on the NumPy backend) is done. The other modules under `src/kalman_py/` are still empty stubs. `kalman-python-repo-guide.md` is the build plan for `kalman-py`: a fast, typed Python Kalman filter library meant to fill gaps left by FilterPy and pykalman (JAX backend, automatic EKF Jacobians, Q/R learning, NIS/NEES diagnostics). Treat that guide as the spec and read the relevant section before implementing anything. Ruff excludes the guide because newer ruff formats code blocks inside Markdown.
 
 ## Tooling
 
@@ -12,11 +12,19 @@ Set up the environment with `uv sync --all-extras`.
 
 - uv for environments and dependencies, `src/` layout, hatchling build, Python >=3.10.
 - NumPy is the only required dependency. `jax` and `matplotlib` are optional extras (`[jax]`, `[plot]`). Code must work when JAX isn't installed.
-- Lint/type: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy` (strict, line length 100).
+- Lint/type: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy src tests` (strict, line length 100).
 - Tests: `uv run pytest` skips tests marked `slow` by default (`addopts = "-m 'not slow'"`). Run everything with `uv run pytest -m ""`. Run a single test with `uv run pytest tests/comparison/test_equivalence.py::test_filter_matches_filterpy`.
 - FilterPy, pykalman and scipy are dev-only dependencies used for comparison. Use `pytest.importorskip` for them. pykalman may not install on the newest NumPy.
 
-## Planned architecture
+## Architecture
+
+- `backends/numpy_backend.py` holds pure functions (`predict`, `update`, `kalman_filter`). The classes (`linear.KalmanFilter`) validate inputs, keep the step-by-step state `(x, P)` and dispatch `filter(zs, backend=...)` to a backend. `filter()` always starts from `(x0, P0)` and leaves `(x, P)` untouched.
+- `FilterResult` (`result.py`) stores posteriors plus the one-step-ahead priors (`predicted_means`, `predicted_covs`) that the RTS smoother needs, along with per-step NIS and the total log-likelihood.
+- Dtype is preserved end to end, so float32 inputs stay float32 (scenario S4 depends on this). Any constant created inside the backends, such as an identity matrix, must use the input dtype.
+- Covariances are symmetrized after every predict and update, and gains come from `np.linalg.solve` rather than an explicit inverse.
+- `tests/scenarios.py` holds the shared synthetic problems, and `tests/conftest.py` exposes them as fixtures.
+
+## Plan for the rest
 
 - `src/kalman_py/`: `linear.py`, `ekf.py`, `ukf.py`, `smoother.py` (RTS), `learning.py` (EM / likelihood fitting of Q, R), `diagnostics.py` (NIS/NEES), `backends/{numpy_backend,jax_backend}.py`.
 - API supports both step-wise use (`kf.predict(dt=...)`, `kf.update(z)`) and batch use (`kf.filter(zs, backend="numpy"|"jax")` returns a result with `.means`, `.covs` and `.nis`; `kf.smooth(result)`).
@@ -25,6 +33,7 @@ Set up the environment with `uv sync --all-extras`.
 
 ## Correctness and benchmarking rules
 
+- The stability test checks for a covariance that is positive semi-definite *to working precision* (min eigenvalue ≥ −10·n·eps·max eigenvalue), not strictly min eigenvalue > 0. When R is tiny, cond(P) reaches about 1/eps, and `eigvalsh` can't resolve the sign of the smallest eigenvalue, whichever filter produced P. Only a square-root (Cholesky-factor) filter would get past this.
 - On linear-Gaussian problems the goal is to **match** FilterPy/pykalman (rtol 1e-9). Improvements come from speed, stability and features, not accuracy.
 - Our filter and FilterPy predict before the first update. pykalman updates first. Align the prior (`x0 = F x0`, `P0 = F P0 Fᵀ + Q`) before comparing, because this mismatch is the most common cause of false test failures.
 - Enable `jax.config.update("jax_enable_x64", True)` in `tests/conftest.py` and in benchmarks. JAX defaults to float32.
